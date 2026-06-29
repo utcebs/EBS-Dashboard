@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { Routes, Route, Link, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { supabase, supabasePublic } from './supabaseClient'
 import LandingPage from './components/LandingPage'
+import AiBriefing from './components/AiBriefing'
+import AiChatbot from './components/AiChatbot'
 import {
   LayoutDashboard, FolderKanban, GanttChart as GanttIcon, LogIn, LogOut,
   Users, Plus, Pencil, Trash2, X, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, AlertTriangle,
@@ -1098,6 +1100,9 @@ function Layout() {
       </div>
     </main>
 
+    {/* AI project assistant — floats on app pages (not landing/login) */}
+    {!isLanding && location.pathname !== '/login' && <AiChatbot />}
+
     {/* Mobile bottom nav */}
     <div className="bottom-nav lg:hidden">
       {nav.map(({ path, label, icon: Icon }) => (
@@ -1253,6 +1258,7 @@ function Dashboard() {
       </div>
       {/* Project-level dashboard selector */}
       <div className="flex items-center gap-2">
+        <AiBriefing />
         <button onClick={() => generateReport(projects)}
           className="flex items-center gap-2 px-4 py-2 bg-surface-900 text-white rounded-xl text-sm font-medium hover:bg-surface-800 transition-colors shadow-sm whitespace-nowrap">
           <Presentation size={16} /> Generate MBR

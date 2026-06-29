@@ -1,0 +1,1659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="EBS Tracker" />
+  <meta name="theme-color" content="#0c0a08" />
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="apple-touch-startup-image" href="icon-512.png" />
+  <title>EBS Tracker — My Tasks</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    /* ── Priority colours ─────────────────────────── */
+    :root {
+      --p-urgent:    #ef4444;
+      --p-important: #f59e0b;
+      --p-medium:    #6366f1;
+      --p-low:       #10b981;
+    }
+    .p-badge {
+      display:inline-flex;align-items:center;gap:5px;
+      padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid;
+    }
+    .p-Urgent    { border-color:var(--p-urgent);   color:var(--p-urgent);   background:rgba(239,68,68,.1); }
+    .p-Important { border-color:var(--p-important);color:var(--p-important);background:rgba(245,158,11,.1); }
+    .p-Medium    { border-color:var(--p-medium);   color:var(--p-medium);   background:rgba(99,102,241,.1); }
+    .p-Low       { border-color:var(--p-low);      color:var(--p-low);      background:rgba(16,185,129,.1); }
+
+    /* ── Task cards ───────────────────────────────── */
+    .task-lane { display:flex;flex-direction:column;gap:10px; }
+    .task-card {
+      background:var(--bg-card);border:1px solid var(--border);
+      border-radius:var(--radius-lg);padding:16px 18px;
+      display:flex;align-items:flex-start;gap:14px;
+      transition:.2s;position:relative;overflow:hidden;
+    }
+    .task-card::before {
+      content:'';position:absolute;left:0;top:0;bottom:0;width:4px;
+    }
+    .task-card.p-Urgent::before    { background:var(--p-urgent); }
+    .task-card.p-Important::before { background:var(--p-important); }
+    .task-card.p-Medium::before    { background:var(--p-medium); }
+    .task-card.p-Low::before       { background:var(--p-low); }
+    .task-card:hover { transform:translateY(-1px);border-color:var(--border-light); }
+
+    .task-card-body { flex:1;min-width:0; }
+    .task-title { font-weight:700;font-size:14px;margin-bottom:6px; }
+    .task-meta  { display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--text-3); }
+    .task-actions { display:flex;gap:8px;flex-shrink:0; }
+
+    /* ── Priority selector cards ──────────────────── */
+    .priority-cards { display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:4px; }
+    .priority-pick {
+      border:2px solid var(--border);border-radius:var(--radius);
+      padding:10px;text-align:center;cursor:pointer;transition:.2s;
+    }
+    .priority-pick:hover { border-color:var(--border-light); }
+    .priority-pick.sel-Urgent    { border-color:var(--p-urgent);   background:rgba(239,68,68,.08); }
+    .priority-pick.sel-Important { border-color:var(--p-important);background:rgba(245,158,11,.08); }
+    .priority-pick.sel-Medium    { border-color:var(--p-medium);   background:rgba(99,102,241,.08); }
+    .priority-pick.sel-Low       { border-color:var(--p-low);      background:rgba(16,185,129,.08); }
+    .priority-pick-icon { font-size:18px;margin-bottom:4px; }
+    .priority-pick-label { font-size:11px;font-weight:700; }
+
+    /* ── Section headers ──────────────────────────── */
+    .section-hdr {
+      display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:10px;
+      border-bottom:1px solid var(--border);
+    }
+    .section-hdr-title { font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em; }
+    .section-count {
+      font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;
+      background:var(--bg-surface);border:1px solid var(--border);color:var(--text-3);
+    }
+
+    /* ── Admin user filter ────────────────────────── */
+    .user-filter-tabs { display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px; }
+    .uft { padding:7px 16px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid var(--border-light);background:var(--bg-card);color:var(--text-2);cursor:pointer;transition:.2s; }
+    .uft:hover { background:var(--bg-hover); }
+    .uft.active { background:var(--accent-glow);color:var(--accent-light);border-color:rgba(99,102,241,.4); }
+
+    .due-overdue { color:var(--danger) !important;font-weight:700; }
+    .due-today   { color:var(--gold) !important;font-weight:700; }
+    .due-soon    { color:var(--warning) !important; }
+  </style>
+</head>
+<body>
+<script>document.addEventListener("DOMContentLoaded",()=>{if(typeof initTheme==="function"){initTheme();injectThemeToggle();}});</script>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+<div class="app-wrapper">
+  <button class="menu-toggle" id="menuToggle">☰</button>
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="main-content fade-in">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">📌 My Tasks</h1>
+        <p class="page-subtitle" id="pageSubtitle">Your upcoming priorities — plan ahead, stay on track</p>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" onclick="openAddModal()"><span>➕</span> Add Task</button>
+        <button class="btn btn-secondary" id="assignTaskBtn" style="display:none;" onclick="openAssignModal()"><span>📋</span> Assign to User</button>
+      </div>
+    </div>
+
+    <!-- Admin: view switcher (Tasks board ↔ Completion Analysis dashboard) -->
+    <div id="taskViewSwitcher" style="display:none;margin-bottom:20px;">
+      <div style="display:inline-flex;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:4px;gap:4px;">
+        <button class="task-view-btn active" data-view="tasks" onclick="switchTaskView('tasks')">📋 Tasks Board</button>
+        <button class="task-view-btn" data-view="analysis" onclick="switchTaskView('analysis')">📊 Task Completion Analysis</button>
+      </div>
+    </div>
+    <style>
+      .task-view-btn { padding:7px 16px;border-radius:8px;font-size:12px;font-weight:600;border:none;background:transparent;color:var(--text-2);cursor:pointer;transition:.2s;font-family:inherit; }
+      .task-view-btn:hover { color:var(--text-1); }
+      .task-view-btn.active { background:linear-gradient(135deg,var(--accent-dark),var(--accent));color:#080600; }
+      body.light-mode .task-view-btn.active { background:linear-gradient(135deg,#5C4128,#7A5A38);color:#FAF9F6; }
+    </style>
+
+    <!-- ─── VIEW: Task Completion Analysis (admin only) ─── -->
+    <div id="view-analysis" style="display:none;">
+      <!-- KPI strip -->
+      <div id="tcaKPIs" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;"></div>
+      <!-- Charts row -->
+      <div class="tca-charts-row" style="display:grid;grid-template-columns:2fr 1fr;gap:18px;margin-bottom:20px;">
+        <div class="card">
+          <div class="card-title-lg">👥 Tasks per Employee</div>
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:10px;">Stacked by status. Hover for exact counts.</div>
+          <div style="position:relative;height:340px;"><canvas id="tcaPerEmployeeChart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title-lg">🍩 Overall Status</div>
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:10px;">Across every assigned task.</div>
+          <div style="position:relative;height:340px;"><canvas id="tcaStatusDonut"></canvas></div>
+        </div>
+      </div>
+      <!-- Per-employee leaderboard -->
+      <div class="card">
+        <div class="card-title-lg">🏆 Completion Leaderboard</div>
+        <div style="font-size:11px;color:var(--text-3);margin-bottom:10px;">Sorted by on-time rate. Click any number to see the underlying tasks.</div>
+        <div class="table-wrapper" style="border:none;">
+          <table>
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th style="text-align:center;">Assigned</th>
+                <th style="text-align:center;color:var(--success);">On Time</th>
+                <th style="text-align:center;color:var(--warning);">Late</th>
+                <th style="text-align:center;color:#60a5fa;">Active</th>
+                <th style="text-align:center;color:var(--p-urgent);">Overdue Open</th>
+                <th style="text-align:center;color:#f59e0b;">On Hold</th>
+                <th style="text-align:center;">On-Time Rate</th>
+              </tr>
+            </thead>
+            <tbody id="tcaLeaderboardBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── VIEW: Tasks Board (default) ─── -->
+    <div id="view-tasks">
+
+    <!-- Admin: user filter tabs -->
+    <div id="adminFilterSection" style="display:none;">
+      <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Viewing tasks for:</div>
+      <div class="user-filter-tabs" id="userFilterTabs"></div>
+
+      <!-- Admin: status chips -->
+      <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 10px;">Filter by status:</div>
+      <div class="status-chip-row" id="statusChipRow" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>
+    </div>
+
+    <!-- Admin: assigned-task analytics card. Always visible to admins. -->
+    <div id="assignedAnalyticsCard" style="display:none;margin-bottom:20px;"></div>
+
+    <!-- Admin: per-employee assigned-task dashboard. One collapsible card per
+         employee with at least one assigned task. Always visible to admins. -->
+    <div id="assignedByEmployee" style="display:none;margin-bottom:24px;"></div>
+
+    <!-- Summary stat pills -->
+    <div id="statPills" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;"></div>
+
+    <!-- Task lanes by priority -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" id="taskBoard">
+      <div style="loading"><div class="spinner"></div></div>
+    </div>
+
+    </div><!-- /view-tasks -->
+  </main>
+</div>
+
+<!-- ── Add Task Modal ── -->
+<div class="modal-backdrop" id="addTaskModal">
+  <div class="modal" style="max-width:500px;">
+    <div class="modal-header">
+      <h2 class="modal-title">📌 Add Priority Task</h2>
+      <button class="modal-close" onclick="closeAddModal()">✕</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Task Title <span class="req">*</span></label>
+      <input type="text" id="newTaskTitle" class="form-control" placeholder="What needs to be done?" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Priority <span class="req">*</span></label>
+      <div class="priority-cards">
+        <div class="priority-pick" id="pick-Urgent" onclick="selectPriority('Urgent')">
+          <div class="priority-pick-icon">🚨</div>
+          <div class="priority-pick-label" style="color:var(--p-urgent)">Urgent</div>
+        </div>
+        <div class="priority-pick" id="pick-Important" onclick="selectPriority('Important')">
+          <div class="priority-pick-icon">⭐</div>
+          <div class="priority-pick-label" style="color:var(--p-important)">Important</div>
+        </div>
+        <div class="priority-pick" id="pick-Medium" onclick="selectPriority('Medium')">
+          <div class="priority-pick-icon">📋</div>
+          <div class="priority-pick-label" style="color:var(--p-medium)">Medium</div>
+        </div>
+        <div class="priority-pick" id="pick-Low" onclick="selectPriority('Low')">
+          <div class="priority-pick-icon">🕐</div>
+          <div class="priority-pick-label" style="color:var(--p-low)">Low</div>
+        </div>
+      </div>
+      <input type="hidden" id="newTaskPriority" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Due Date</label>
+      <input type="date" id="newTaskDue" class="form-control" />
+    </div>
+    <div id="addTaskError" class="login-error" style="margin-bottom:12px;"></div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeAddModal()">Cancel</button>
+      <button class="btn btn-primary" id="addTaskBtn" onclick="saveTask()">📌 Add Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Move to Log Modal ── -->
+<div class="modal-backdrop" id="logModal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <h2 class="modal-title">📝 Log This Task</h2>
+      <button class="modal-close" onclick="closeLogModal()">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--text-2);margin-bottom:20px;">Fill in the details and save — this task will be moved to your work log.</p>
+    <div class="form-group">
+      <label class="form-label">Task <span class="req">*</span></label>
+      <input type="text" id="logTaskTitle" class="form-control" />
+    </div>
+    <!-- Link to Project (mirrors log.html) -->
+    <div class="form-group" id="logTaskProjectGroup">
+      <label class="form-label" id="logTaskProjectLabel">🔗 Link to Project <span id="logTaskProjectReq" style="display:none;" class="req">*</span></label>
+      <select id="logTaskLinkedProject" class="form-control">
+        <option value="">-- Select a project (optional) --</option>
+      </select>
+      <div class="form-hint" id="logTaskProjectHint">Link this task to a tracked project for analytics.</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <textarea id="logTaskDesc" class="form-control" rows="2" placeholder="Brief description…"></textarea>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Date <span class="req">*</span></label>
+        <input type="date" id="logTaskDate" class="form-control" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hours Spent <span class="req">*</span></label>
+        <input type="number" id="logTaskHours" class="form-control" min="0.25" max="24" step="0.25" placeholder="e.g. 2.5" />
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Month</label>
+        <input type="text" id="logTaskMonth" class="form-control" readonly style="background:rgba(148,163,184,0.08);" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Week of Month</label>
+        <input type="number" id="logTaskWeek" class="form-control" min="1" max="4" />
+        <div class="form-hint">Auto-calculated (1-4 per month).</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Sub-Category <span class="req">*</span></label>
+      <select id="logTaskSubCategory" class="form-control" onchange="onSubcatChange()">
+        <option value="">Select sub-category…</option>
+      </select>
+      <div class="form-hint">Parent category is set automatically.</div>
+    </div>
+    <input type="hidden" id="logTaskCategory" />
+    <div class="form-group">
+      <label class="form-label">Key Accomplishment</label>
+      <input type="text" id="logTaskAccomp" class="form-control" placeholder="What did you achieve?" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Comments / Notes</label>
+      <textarea id="logTaskNotes" class="form-control" rows="2" placeholder="Any blockers, next steps, or additional context…"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="completed-check">
+        <input type="checkbox" id="logTaskCompleted" />
+        <span>✅ Mark this task as <strong>completed</strong></span>
+      </label>
+      <div class="form-hint">Check this on your final log entry for this task.</div>
+    </div>
+    <div id="logModalError" class="login-error" style="margin-bottom:12px;"></div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeLogModal()">Cancel</button>
+      <button class="btn btn-primary" id="logTaskBtn" onclick="submitTaskLog()">💾 Save to Work Log</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Delete Confirm Modal ── -->
+<div class="modal-backdrop" id="deleteTaskModal">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-header">
+      <h2 class="modal-title">🗑️ Delete Task</h2>
+      <button class="modal-close" onclick="closeDeleteTaskModal()">✕</button>
+    </div>
+    <p style="color:var(--text-2);margin-bottom:24px;">Permanently delete <strong id="deleteTaskName" style="color:var(--text-1)"></strong>? This cannot be undone.</p>
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeDeleteTaskModal()">Cancel</button>
+      <button class="btn btn-danger" id="confirmDeleteTaskBtn">🗑️ Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Put Task On Hold Modal ── -->
+<div class="modal-backdrop" id="holdModal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <h2 class="modal-title">🚧 Put Task On Hold</h2>
+      <button class="modal-close" onclick="closeHoldModal()">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--text-2);margin-bottom:12px;">
+      <strong id="holdTaskTitle"></strong>
+    </p>
+    <div class="form-group">
+      <label class="form-label">Why is this task on hold? <span class="req">*</span></label>
+      <textarea id="holdReasonText" class="form-control" rows="3" placeholder="e.g. Waiting on SF Partner — blocked by their UAT availability." maxlength="500"></textarea>
+      <div class="form-hint">Visible to everyone on the board and to the admin.</div>
+    </div>
+    <div id="holdError" class="login-error" style="margin-bottom:12px;"></div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeHoldModal()">Cancel</button>
+      <button class="btn btn-primary" id="confirmHoldBtn" onclick="confirmHold()">🚧 Put On Hold</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Assign Task Modal (Admin) ── -->
+<div class="modal-backdrop" id="assignTaskModal">
+  <div class="modal" style="max-width:500px;">
+    <div class="modal-header">
+      <h2 class="modal-title">📋 Assign Task to Employee</h2>
+      <button class="modal-close" onclick="closeAssignModal()">✕</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Assign To <span class="req">*</span></label>
+      <select id="assignToUser" class="form-control">
+        <option value="">Select employee…</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Task Title <span class="req">*</span></label>
+      <input type="text" id="assignTaskTitle" class="form-control" placeholder="What needs to be done?" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Priority <span class="req">*</span></label>
+      <div class="priority-cards">
+        <div class="priority-pick" id="apick-Urgent" onclick="selectAssignPriority('Urgent')">
+          <div class="priority-pick-icon">🚨</div>
+          <div class="priority-pick-label" style="color:var(--p-urgent)">Urgent</div>
+        </div>
+        <div class="priority-pick" id="apick-Important" onclick="selectAssignPriority('Important')">
+          <div class="priority-pick-icon">⭐</div>
+          <div class="priority-pick-label" style="color:var(--p-important)">Important</div>
+        </div>
+        <div class="priority-pick" id="apick-Medium" onclick="selectAssignPriority('Medium')">
+          <div class="priority-pick-icon">📋</div>
+          <div class="priority-pick-label" style="color:var(--p-medium)">Medium</div>
+        </div>
+        <div class="priority-pick" id="apick-Low" onclick="selectAssignPriority('Low')">
+          <div class="priority-pick-icon">🕐</div>
+          <div class="priority-pick-label" style="color:var(--p-low)">Low</div>
+        </div>
+      </div>
+      <input type="hidden" id="assignTaskPriority" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Due Date</label>
+      <input type="date" id="assignTaskDue" class="form-control" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">🔗 Link to Project</label>
+      <select id="assignTaskLinkedProject" class="form-control">
+        <option value="">-- Select a project (optional) --</option>
+      </select>
+      <div class="form-hint">When the user logs against this task, the project is pre-selected.</div>
+    </div>
+    <div id="assignTaskError" class="login-error" style="margin-bottom:12px;"></div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeAssignModal()">Cancel</button>
+      <button class="btn btn-primary" id="assignTaskBtn2" onclick="saveAssignedTask()">📋 Assign Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Task Completion Analysis drill-down modal ── -->
+<div class="modal-backdrop" id="tcaDrillModal">
+  <div class="modal" style="max-width:820px;">
+    <div class="modal-header">
+      <h2 class="modal-title" id="tcaDrillTitle">Tasks</h2>
+      <button class="modal-close" onclick="closeTcaDrill()">✕</button>
+    </div>
+    <div id="tcaDrillBody" style="max-height:70vh;overflow-y:auto;"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px;">
+      <button class="btn btn-secondary" onclick="closeTcaDrill()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/utils.js"></script>
+<script>
+const session = requireAuth();
+let selectedAssignPriority = '';
+
+// Map of category-name → array of subcategory names, sourced from
+// admin-managed `categories` / `subcategories` (Phase 4) with fallback
+// to the legacy three tables if the migration isn't applied yet.
+let CATEGORY_ICONS = {};
+async function loadAllSubcats() {
+  const cats = await loadCategories();
+  const out = {};
+  CATEGORY_ICONS = {};
+  cats.forEach(c => {
+    out[c.name] = (c.subcategories || []).map(s => s.name);
+    CATEGORY_ICONS[c.name] = c.icon || '📁';
+  });
+  return out;
+}
+// Admins default to the 'all' user filter so the analytics KPIs reflect
+// the whole team (what they assigned to others). Non-admins only ever
+// see their own tasks. Assigning an adminId default broke the card
+// because it filtered to "tasks assigned TO the admin" → usually zero.
+let allTasks = [], allUsers = [], activeUserId = session.role === 'admin' ? 'all' : session.id;
+let allSubcats = {};
+let selectedPriority = '';
+let loggingTaskId = null, deletingTaskId = null;
+
+const PRIORITY_ORDER = ['Urgent','Important','Medium','Low'];
+const PRIORITY_ICONS = { Urgent:'🚨', Important:'⭐', Medium:'📋', Low:'🕐' };
+
+async function init() {
+  renderSidebar('tasks');
+  loadSidebarStats(session.id);
+  document.getElementById('menuToggle').addEventListener('click', () => {
+    document.getElementById('app-sidebar').classList.toggle('open');
+    document.getElementById('sidebarOverlay').classList.toggle('open');
+  });
+
+  // Log-modal date → auto-update week + month
+  document.getElementById('logTaskDate').addEventListener('change', recalcLogModalWeek);
+
+  initTheme(); injectThemeToggle();
+  if (session.role === 'admin') {
+    await loadUsers();
+    buildAdminFilter();
+    document.getElementById('adminFilterSection').style.display = 'block';
+    document.getElementById('taskViewSwitcher').style.display = 'block';
+    document.getElementById('pageSubtitle').textContent = 'View and manage all team priority tasks';
+    const assignBtn = document.getElementById('assignTaskBtn');
+    if (assignBtn) {
+      assignBtn.style.display = 'inline-flex';
+      // Populate assign user select
+      const sel = document.getElementById('assignToUser');
+      allUsers.filter(u => u.id !== session.id).forEach(u => sel.appendChild(new Option(u.full_name, u.id)));
+    }
+  }
+
+  allSubcats = await loadAllSubcats();
+  await loadTasks();
+  renderStatusChips();
+  renderBoard();
+}
+
+async function loadUsers() {
+  const { data } = await db.from('profiles').select('id, full_name, avatar_url').order('full_name');
+  allUsers = data || [];
+}
+
+let statusFilter = 'active'; // 'active' (pending+on_hold), 'pending', 'on_hold', 'done', 'logged', 'all'
+async function loadTasks() {
+  // Admin sees all statuses (for filtering); regular users see only their active tasks.
+  const statuses = session.role === 'admin'
+    ? ['pending','on_hold','done','logged']
+    : ['pending','on_hold'];
+  let query = db.from('priority_tasks').select('*').in('status', statuses).order('created_at', { ascending: false });
+  if (session.role !== 'admin') {
+    query = query.eq('user_id', session.id);
+  }
+  const { data, error } = await query;
+  if (error) {
+    console.error('loadTasks error:', error);
+    showToast('Failed to load tasks: ' + error.message, 'error');
+    allTasks = [];
+    return;
+  }
+  allTasks = data || [];
+}
+
+// Render status chips for admin — with live counts. Clicking filters the board.
+const STATUS_META = {
+  active:  { label: 'Active',  emoji: '🎯', color: '#60a5fa' },
+  pending: { label: 'Pending', emoji: '📌', color: '#60a5fa' },
+  on_hold: { label: 'On Hold', emoji: '🚧', color: '#f59e0b' },
+  done:    { label: 'Done',    emoji: '✅', color: '#10b981' },
+  logged:  { label: 'Logged',  emoji: '📝', color: '#8b5cf6' },
+  all:     { label: 'All',     emoji: '📋', color: '#94a3b8' },
+};
+function renderStatusChips() {
+  if (session.role !== 'admin') return;
+  const row = document.getElementById('statusChipRow');
+  if (!row) return;
+  // Respect the user tab filter when computing counts
+  const filtered = activeUserId === 'all' ? allTasks : allTasks.filter(t => t.user_id === activeUserId);
+  const counts = {
+    active:  filtered.filter(t => t.status === 'pending' || t.status === 'on_hold').length,
+    pending: filtered.filter(t => t.status === 'pending').length,
+    on_hold: filtered.filter(t => t.status === 'on_hold').length,
+    done:    filtered.filter(t => t.status === 'done').length,
+    logged:  filtered.filter(t => t.status === 'logged').length,
+    all:     filtered.length,
+  };
+  const order = ['active','pending','on_hold','done','logged','all'];
+  row.innerHTML = order.map(k => {
+    const m = STATUS_META[k];
+    const selected = statusFilter === k;
+    return `<button type="button" class="status-chip${selected?' selected':''}" data-status="${k}"
+      style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;
+             font-size:12px;font-weight:600;cursor:pointer;transition:.15s;
+             border:1px solid ${selected ? m.color : 'var(--border)'};
+             background:${selected ? m.color+'22' : 'transparent'};
+             color:${selected ? m.color : 'var(--text-2)'};">
+      ${m.emoji} ${m.label}
+      <span style="background:${m.color}22;color:${m.color};padding:1px 7px;border-radius:999px;font-size:11px;">${counts[k]}</span>
+    </button>`;
+  }).join('');
+  row.querySelectorAll('.status-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      statusFilter = btn.dataset.status;
+      renderStatusChips();
+      renderBoard();
+    });
+  });
+}
+
+// ── Admin assigned-task analytics ─────────────────────────
+// Always visible to admins (regardless of status filter) so a freshly-
+// assigned overdue task surfaces immediately. Pool already includes every
+// status, so the KPIs reflect the live state.
+// Computes on-time / late / avg-delay / overdue-still-open from done_at +
+// due_date. done_at is stamped by the Move-to-Log flow when isCompleted is
+// checked. Only assigned tasks (assigned_by NOT NULL) are counted, since
+// the analytics is about what the admin handed out.
+function renderAssignedAnalytics() {
+  const card = document.getElementById('assignedAnalyticsCard');
+  if (!card) return;
+  if (session.role !== 'admin') {
+    card.style.display = 'none';
+    return;
+  }
+  const pool = (activeUserId === 'all' ? allTasks : allTasks.filter(t => t.user_id === activeUserId))
+    .filter(t => t.assigned_by);
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  const closed = pool.filter(t => (t.status === 'done' || t.status === 'logged'));
+  const onTime = []; const late = []; let totalDelayDays = 0;
+  closed.forEach(t => {
+    if (!t.due_date || !t.done_at) return;
+    const due  = new Date(t.due_date); due.setHours(0,0,0,0);
+    const done = new Date(t.done_at); done.setHours(0,0,0,0);
+    if (done <= due) onTime.push(t);
+    else { late.push(t); totalDelayDays += Math.floor((done - due) / 86400000); }
+  });
+  const avgDelay = late.length ? Math.round((totalDelayDays / late.length) * 10) / 10 : 0;
+  const overdueOpen = pool.filter(t => t.status !== 'done' && t.status !== 'logged' && t.due_date && new Date(t.due_date) < today);
+  // Active & on track: not closed, and either no due date or due date is today/future
+  const activeOnTrack = pool.filter(t => t.status !== 'done' && t.status !== 'logged' && (!t.due_date || new Date(t.due_date) >= today));
+
+  // Per-assignee breakdown
+  const byUser = {};
+  pool.forEach(t => {
+    const uid = t.user_id;
+    if (!byUser[uid]) byUser[uid] = { name: (allUsers.find(u => u.id === uid)?.full_name) || '—', total: 0, onTime: 0, late: 0, overdueOpen: 0 };
+    byUser[uid].total++;
+    if (t.status === 'done' || t.status === 'logged') {
+      if (t.due_date && t.done_at) {
+        const due  = new Date(t.due_date); due.setHours(0,0,0,0);
+        const done = new Date(t.done_at); done.setHours(0,0,0,0);
+        if (done <= due) byUser[uid].onTime++; else byUser[uid].late++;
+      }
+    } else if (t.due_date && new Date(t.due_date) < today) {
+      byUser[uid].overdueOpen++;
+    }
+  });
+  const breakdown = Object.values(byUser).sort((a,b) => b.total - a.total);
+
+  card.style.display = 'block';
+  card.innerHTML = `
+    <div class="card" style="padding:18px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;">📊 Assigned Tasks Analytics</div>
+          <div style="font-size:12px;color:var(--text-3);margin-top:2px;">${pool.length} assigned · ${closed.length} closed${overdueOpen.length ? ` · ${overdueOpen.length} overdue still open` : ''}</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('assignedBreakdown').style.display = document.getElementById('assignedBreakdown').style.display==='none' ? 'block' : 'none';">👥 Per-Assignee Breakdown</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;">
+        <div style="padding:14px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);">
+          <div style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Total Assigned</div>
+          <div style="font-size:24px;font-weight:800;margin-top:4px;">${pool.length}</div>
+        </div>
+        <div style="padding:14px;background:var(--bg-surface);border:1px solid var(--border);border-left:3px solid #60a5fa;border-radius:var(--radius-lg);">
+          <div style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Active · On Track</div>
+          <div style="font-size:24px;font-weight:800;color:#60a5fa;margin-top:4px;">${activeOnTrack.length}</div>
+        </div>
+        <div style="padding:14px;background:var(--bg-surface);border:1px solid var(--border);border-left:3px solid var(--success);border-radius:var(--radius-lg);">
+          <div style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;">On Time</div>
+          <div style="font-size:24px;font-weight:800;color:var(--success);margin-top:4px;">${onTime.length}</div>
+        </div>
+        <div style="padding:14px;background:var(--bg-surface);border:1px solid var(--border);border-left:3px solid var(--warning);border-radius:var(--radius-lg);">
+          <div style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Late</div>
+          <div style="font-size:24px;font-weight:800;color:var(--warning);margin-top:4px;">${late.length}<span style="font-size:11px;color:var(--text-3);font-weight:600;margin-left:6px;">avg ${avgDelay}d</span></div>
+        </div>
+        <div style="padding:14px;background:var(--bg-surface);border:1px solid var(--border);border-left:3px solid var(--p-urgent);border-radius:var(--radius-lg);">
+          <div style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Overdue · Open</div>
+          <div style="font-size:24px;font-weight:800;color:var(--p-urgent);margin-top:4px;">${overdueOpen.length}</div>
+        </div>
+      </div>
+      <div id="assignedBreakdown" style="display:none;margin-top:16px;border-top:1px solid var(--border);padding-top:14px;">
+        ${breakdown.length
+          ? `<div style="display:grid;grid-template-columns:1.5fr repeat(4, 1fr);gap:8px;font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:0 8px 6px;border-bottom:1px solid var(--border);">
+              <div>Assignee</div><div style="text-align:center;">Total</div><div style="text-align:center;color:var(--success);">On Time</div><div style="text-align:center;color:var(--warning);">Late</div><div style="text-align:center;color:var(--p-urgent);">Overdue Open</div>
+            </div>
+            ${breakdown.map(r => `
+              <div style="display:grid;grid-template-columns:1.5fr repeat(4, 1fr);gap:8px;font-size:13px;padding:8px;border-bottom:1px solid var(--border);">
+                <div style="font-weight:600;">${r.name}</div>
+                <div style="text-align:center;">${r.total}</div>
+                <div style="text-align:center;color:var(--success);font-weight:700;">${r.onTime}</div>
+                <div style="text-align:center;color:var(--warning);font-weight:700;">${r.late}</div>
+                <div style="text-align:center;color:var(--p-urgent);font-weight:700;">${r.overdueOpen}</div>
+              </div>`).join('')}`
+          : '<div style="font-size:12px;color:var(--text-3);">No assignees with closed tasks yet.</div>'}
+      </div>
+    </div>`;
+}
+
+// ── Admin view switcher (Tasks Board ↔ Task Completion Analysis) ──
+let _tcaCharts = {};
+function switchTaskView(view) {
+  document.querySelectorAll('.task-view-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.view === view);
+  });
+  document.getElementById('view-tasks').style.display    = view === 'tasks'    ? 'block' : 'none';
+  document.getElementById('view-analysis').style.display = view === 'analysis' ? 'block' : 'none';
+  if (view === 'analysis') renderCompletionAnalysis();
+}
+
+// ── Task Completion Analysis (admin dashboard) ─────────────
+// 5 buckets per task:
+//   on_time        — done/logged AND (no due_date OR done_at ≤ due_date)
+//   completed_late — done/logged AND done_at > due_date
+//   active         — pending AND not past due
+//   overdue_open   — pending AND past due
+//   on_hold        — status='on_hold'
+// Every visual (KPIs, stacked bar, donut, leaderboard cell) is clickable
+// and opens the shared drill-down modal with the matching task list.
+const TCA_BUCKETS = {
+  on_time:        { label: 'On Time',        color: 'rgba(34,197,94,.85)',   solid: 'var(--success)' },
+  completed_late: { label: 'Completed Late', color: 'rgba(245,158,11,.85)',  solid: 'var(--warning)' },
+  active:         { label: 'Active',         color: 'rgba(96,165,250,.85)',  solid: '#60a5fa' },
+  overdue_open:   { label: 'Overdue Open',   color: 'rgba(239,68,68,.85)',   solid: 'var(--p-urgent)' },
+  // On Hold uses slate (vs Completed Late's amber) so the two stay
+  // visually distinct on the stacked bar + donut.
+  on_hold:        { label: 'On Hold',        color: 'rgba(148,163,184,.85)', solid: '#94a3b8' },
+};
+
+function tcaBucket(t, today) {
+  const closed = t.status === 'done' || t.status === 'logged';
+  if (closed) {
+    if (!t.due_date || !t.done_at) return 'on_time'; // closed but no due date → count as on-time
+    const due  = new Date(t.due_date); due.setHours(0,0,0,0);
+    const done = new Date(t.done_at); done.setHours(0,0,0,0);
+    return done <= due ? 'on_time' : 'completed_late';
+  }
+  if (t.status === 'on_hold') return 'on_hold';
+  if (t.due_date && new Date(t.due_date) < today) return 'overdue_open';
+  return 'active';
+}
+
+function renderCompletionAnalysis() {
+  if (session.role !== 'admin') return;
+  Object.values(_tcaCharts).forEach(c => { try { c.destroy(); } catch(e){} });
+  _tcaCharts = {};
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const pool = allTasks.filter(t => t.assigned_by);
+  const tagged = pool.map(t => ({ ...t, _bucket: tcaBucket(t, today) }));
+
+  const totals = { on_time:0, completed_late:0, active:0, overdue_open:0, on_hold:0 };
+  tagged.forEach(t => { totals[t._bucket]++; });
+  const assigned = pool.length;
+  const completedAny = totals.on_time + totals.completed_late;
+  const onTimeRate = assigned ? Math.round((totals.on_time / assigned) * 100) : 0;
+
+  // Avg days late (for the completed_late bucket)
+  let totalDelay = 0;
+  tagged.filter(t => t._bucket === 'completed_late').forEach(t => {
+    const due  = new Date(t.due_date); due.setHours(0,0,0,0);
+    const done = new Date(t.done_at); done.setHours(0,0,0,0);
+    totalDelay += Math.floor((done - due) / 86400000);
+  });
+  const avgDelay = totals.completed_late ? Math.round((totalDelay / totals.completed_late) * 10) / 10 : 0;
+
+  // KPI strip — every card is clickable
+  const kpi = (label, val, color, bucket, extra) => `
+    <div onclick="${bucket ? `openTcaDrill('${bucket}')` : ''}" style="padding:14px;background:var(--bg-surface);border:1px solid var(--border);border-left:3px solid ${color};border-radius:var(--radius-lg);${bucket ? 'cursor:pointer;transition:.15s;' : ''}" ${bucket ? 'onmouseover="this.style.transform=\'translateY(-1px)\'" onmouseout="this.style.transform=\'\'"' : ''}>
+      <div style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;">${label}</div>
+      <div style="font-size:24px;font-weight:800;color:${color};margin-top:4px;">${val}${extra ? `<span style="font-size:11px;color:var(--text-3);font-weight:600;margin-left:6px;">${extra}</span>` : ''}</div>
+    </div>`;
+  document.getElementById('tcaKPIs').innerHTML = [
+    kpi('Total Assigned',  assigned,                    'var(--text-1)',      'all'),
+    kpi('On Time',         totals.on_time,              TCA_BUCKETS.on_time.solid,        'on_time'),
+    kpi('Completed Late',  totals.completed_late,       TCA_BUCKETS.completed_late.solid, 'completed_late', avgDelay ? `avg ${avgDelay}d` : ''),
+    kpi('Active',          totals.active,               TCA_BUCKETS.active.solid,         'active'),
+    kpi('Overdue · Open',  totals.overdue_open,         TCA_BUCKETS.overdue_open.solid,   'overdue_open'),
+    kpi('On Hold',         totals.on_hold,              TCA_BUCKETS.on_hold.solid,        'on_hold'),
+    kpi('On-Time Rate',    onTimeRate + '%',            onTimeRate >= 75 ? 'var(--success)' : onTimeRate >= 50 ? 'var(--warning)' : 'var(--p-urgent)'),
+  ].join('');
+
+  // Per-employee aggregation
+  const byUser = {};
+  tagged.forEach(t => {
+    const uid = t.user_id;
+    if (!byUser[uid]) {
+      const u = allUsers.find(x => x.id === uid);
+      byUser[uid] = { id: uid, name: u?.full_name || '—', on_time:0, completed_late:0, active:0, overdue_open:0, on_hold:0, total:0 };
+    }
+    byUser[uid][t._bucket]++;
+    byUser[uid].total++;
+  });
+  const rows = Object.values(byUser)
+    .map(r => ({ ...r, rate: r.total ? Math.round((r.on_time / r.total) * 100) : 0 }))
+    .sort((a,b) => b.rate - a.rate || b.total - a.total);
+
+  const bucketOrder = ['on_time','completed_late','active','overdue_open','on_hold'];
+
+  // Tasks per Employee — horizontal stacked bar, click a segment → drill
+  const perEl = document.getElementById('tcaPerEmployeeChart');
+  if (perEl) {
+    _tcaCharts.perEmployee = new Chart(perEl, {
+      type: 'bar',
+      data: {
+        labels: rows.map(r => r.name),
+        datasets: bucketOrder.map(b => ({
+          label: TCA_BUCKETS[b].label,
+          data: rows.map(r => r[b]),
+          backgroundColor: TCA_BUCKETS[b].color,
+          _bucket: b,
+        })),
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 } }, position: 'bottom' },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw}` } }
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: '#64748b', font: { size: 10 }, precision: 0 }, grid: { color: 'rgba(148,163,184,0.10)' }, beginAtZero: true },
+          y: { stacked: true, ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { display: false } }
+        },
+        onClick: (evt, elements) => {
+          if (!elements.length) return;
+          const el = elements[0];
+          const ds = _tcaCharts.perEmployee.data.datasets[el.datasetIndex];
+          const row = rows[el.index];
+          if (!ds._bucket || !row) return;
+          openTcaDrill(ds._bucket, row.id);
+        }
+      }
+    });
+  }
+
+  // Overall status donut — click a slice → drill
+  const donutEl = document.getElementById('tcaStatusDonut');
+  if (donutEl) {
+    _tcaCharts.statusDonut = new Chart(donutEl, {
+      type: 'doughnut',
+      data: {
+        labels: bucketOrder.map(b => TCA_BUCKETS[b].label),
+        datasets: [{
+          data: bucketOrder.map(b => totals[b]),
+          backgroundColor: bucketOrder.map(b => TCA_BUCKETS[b].color),
+          borderColor: 'var(--bg-card)', borderWidth: 2, hoverOffset: 8,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '62%',
+        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } }, position: 'bottom' } },
+        onClick: (evt, elements) => {
+          if (!elements.length) return;
+          openTcaDrill(bucketOrder[elements[0].index]);
+        }
+      }
+    });
+  }
+
+  // Leaderboard table — every number cell is clickable
+  const tbody = document.getElementById('tcaLeaderboardBody');
+  const numCell = (val, color, uid, bucket) => {
+    if (!val) return `<td style="text-align:center;color:var(--text-3);">—</td>`;
+    return `<td style="text-align:center;color:${color};font-weight:700;cursor:pointer;text-decoration:underline;text-decoration-color:transparent;transition:.15s;" onmouseover="this.style.textDecorationColor='${color}'" onmouseout="this.style.textDecorationColor='transparent'" onclick="openTcaDrill('${bucket}','${uid}')">${val}</td>`;
+  };
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-3);font-size:13px;">No assigned tasks yet.</td></tr>';
+  } else {
+    tbody.innerHTML = rows.map(r => {
+      const rateColor = r.rate >= 75 ? 'var(--success)' : r.rate >= 50 ? 'var(--warning)' : 'var(--p-urgent)';
+      return `<tr>
+        <td style="font-weight:700;cursor:pointer;" onclick="openTcaDrill('all','${r.id}')">${r.name}</td>
+        ${numCell(r.total,          'var(--text-1)',                    r.id, 'all')}
+        ${numCell(r.on_time,        TCA_BUCKETS.on_time.solid,          r.id, 'on_time')}
+        ${numCell(r.completed_late, TCA_BUCKETS.completed_late.solid,   r.id, 'completed_late')}
+        ${numCell(r.active,         TCA_BUCKETS.active.solid,           r.id, 'active')}
+        ${numCell(r.overdue_open,   TCA_BUCKETS.overdue_open.solid,     r.id, 'overdue_open')}
+        ${numCell(r.on_hold,        TCA_BUCKETS.on_hold.solid,          r.id, 'on_hold')}
+        <td style="text-align:center;">
+          <div style="display:flex;align-items:center;gap:8px;justify-content:center;">
+            <div style="width:60px;height:6px;background:var(--border);border-radius:999px;overflow:hidden;">
+              <div style="height:100%;width:${r.rate}%;background:${rateColor};border-radius:999px;"></div>
+            </div>
+            <strong style="color:${rateColor};font-size:13px;min-width:36px;text-align:right;">${r.rate}%</strong>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Stash the tagged pool so the drill-down can filter without recomputing
+  _tcaCharts._tagged = tagged;
+}
+
+// Drill-down: show the task list for a given bucket (and optionally employee).
+// `bucket` values: 'on_time' | 'completed_late' | 'active' | 'overdue_open' | 'on_hold' | 'all'
+async function openTcaDrill(bucket, userId) {
+  const tagged = _tcaCharts._tagged || [];
+  let items = bucket === 'all' ? tagged : tagged.filter(t => t._bucket === bucket);
+  if (userId) items = items.filter(t => t.user_id === userId);
+
+  const user = userId ? allUsers.find(u => u.id === userId) : null;
+  const bucketLabel = bucket === 'all' ? 'All Assigned' : (TCA_BUCKETS[bucket]?.label || bucket);
+  const title = user ? `${bucketLabel} · ${user.full_name}` : bucketLabel;
+  document.getElementById('tcaDrillTitle').textContent = `📋 ${title} (${items.length})`;
+
+  const body = document.getElementById('tcaDrillBody');
+  document.getElementById('tcaDrillModal').classList.add('open');
+  if (!items.length) {
+    body.innerHTML = '<div class="empty-state" style="padding:30px;"><div class="empty-icon">📭</div><div class="empty-text">No tasks in this bucket</div></div>';
+    return;
+  }
+  body.innerHTML = '<div class="loading" style="padding:30px;"><div class="spinner"></div> Loading…</div>';
+
+  // Fetch the work-log entries logged against these priority tasks so we
+  // can show the comments / accomplishment the employee wrote per task.
+  // priority_task_id was added in the 2026-04-26 migration; if the column
+  // doesn't exist yet, just render the table without log details.
+  const taskIds = items.map(t => t.id);
+  let logsByTask = {};
+  try {
+    const { data: logs, error } = await db.from('task_logs')
+      .select('priority_task_id, task_description, comments_notes, accomplishment, accomplishment_status, log_date, hours_spent')
+      .in('priority_task_id', taskIds);
+    if (error) throw error;
+    (logs || []).forEach(l => {
+      if (!l.priority_task_id) return;
+      (logsByTask[l.priority_task_id] = logsByTask[l.priority_task_id] || []).push(l);
+    });
+  } catch (e) {
+    // Migration not applied — silent skip; table renders without log details.
+  }
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const escapeHtml = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  const row = (t) => {
+    const assignee = allUsers.find(u => u.id === t.user_id)?.full_name || '—';
+    const bucketPill = `<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:${TCA_BUCKETS[t._bucket].color};color:#000;font-size:10px;font-weight:800;letter-spacing:.04em;">${TCA_BUCKETS[t._bucket].label}</span>`;
+    let timing = '';
+    if (t._bucket === 'completed_late') {
+      const due  = new Date(t.due_date); due.setHours(0,0,0,0);
+      const done = new Date(t.done_at); done.setHours(0,0,0,0);
+      const days = Math.floor((done - due) / 86400000);
+      timing = `<span style="color:var(--warning);font-weight:700;">⏰ ${days}d late</span>`;
+    } else if (t._bucket === 'overdue_open') {
+      const due = new Date(t.due_date); due.setHours(0,0,0,0);
+      const days = Math.floor((today - due) / 86400000);
+      timing = `<span style="color:var(--p-urgent);font-weight:700;">⚠️ ${days}d overdue</span>`;
+    } else if (t._bucket === 'on_time' && t.done_at && t.due_date) {
+      const due  = new Date(t.due_date); due.setHours(0,0,0,0);
+      const done = new Date(t.done_at); done.setHours(0,0,0,0);
+      const days = Math.floor((due - done) / 86400000);
+      timing = days >= 0 ? `<span style="color:var(--success);">✓ ${days === 0 ? 'due day' : `${days}d early`}</span>` : '';
+    }
+
+    // Render the work-log entries that link back to this priority task,
+    // surfacing description + comments + accomplishment (with approval state).
+    const taskLogs = (logsByTask[t.id] || []).sort((a,b) => (b.log_date || '').localeCompare(a.log_date || ''));
+    const logBlocks = taskLogs.map(l => {
+      const descText = (l.task_description || '').trim();
+      const descLine = descText
+        ? `<div style="font-size:11px;color:var(--text-2);margin-top:3px;line-height:1.4;">📝 ${escapeHtml(descText)}</div>`
+        : '';
+      const accStatus = l.accomplishment_status;
+      const accText = (l.accomplishment || '').trim();
+      const accLine = accText
+        ? (accStatus === 'pending'  ? `<div style="font-size:11px;color:var(--warning);margin-top:3px;">🏆 🕒 Pending: <em>${escapeHtml(accText)}</em></div>`
+         : accStatus === 'rejected' ? `<div style="font-size:11px;color:var(--p-urgent);margin-top:3px;">🏆 ⛔ Rejected: <em>${escapeHtml(accText)}</em></div>`
+         :                            `<div style="font-size:11px;color:var(--success);margin-top:3px;">🏆 ${escapeHtml(accText)}</div>`)
+        : '';
+      const notesText = (l.comments_notes || '').trim();
+      const notesLine = notesText
+        ? `<div style="font-size:11px;color:var(--text-2);margin-top:3px;line-height:1.4;">💬 ${escapeHtml(notesText)}</div>`
+        : '';
+      const meta = `<div style="font-size:10px;color:var(--text-3);">📅 ${l.log_date ? formatDate(l.log_date) : '—'} · ⏱️ ${parseFloat(l.hours_spent||0).toFixed(1)}h</div>`;
+      if (!descLine && !accLine && !notesLine) return '';
+      return `<div style="margin-top:6px;padding:6px 10px;background:var(--bg-surface);border-left:2px solid var(--border);border-radius:4px;">${meta}${descLine}${accLine}${notesLine}</div>`;
+    }).join('');
+
+    // Hold reason (visible only when the task is currently on hold)
+    const holdLine = (t._bucket === 'on_hold' && t.hold_reason && t.hold_reason.trim())
+      ? `<div style="margin-top:6px;padding:6px 10px;background:rgba(148,163,184,0.10);border-left:2px solid #94a3b8;border-radius:4px;font-size:11px;color:var(--text-2);line-height:1.4;">🚧 <strong>On hold:</strong> ${escapeHtml(t.hold_reason)}${t.hold_set_at ? `<span style="color:var(--text-3);"> · ${formatDate(t.hold_set_at.slice(0,10))}</span>` : ''}</div>`
+      : '';
+
+    return `<tr>
+      <td style="padding:10px 12px;vertical-align:top;">
+        <div style="font-weight:700;font-size:13px;">${PRIORITY_ICONS[t.priority] || ''} ${escapeHtml(t.title)}</div>
+        ${t.linked_project_id ? `<div style="font-size:11px;color:var(--text-3);margin-top:2px;">🔗 ${escapeHtml(t.linked_project_id)}</div>` : ''}
+        ${holdLine}
+        ${logBlocks}
+      </td>
+      <td style="padding:10px 12px;font-size:12px;vertical-align:top;">${assignee}</td>
+      <td style="padding:10px 12px;font-size:12px;color:var(--text-3);vertical-align:top;">${t.due_date ? formatDate(t.due_date) : '—'}</td>
+      <td style="padding:10px 12px;font-size:12px;color:var(--text-3);vertical-align:top;">${t.done_at ? formatDate(t.done_at.slice(0,10)) : '—'}</td>
+      <td style="padding:10px 12px;vertical-align:top;">${timing}</td>
+      <td style="padding:10px 12px;vertical-align:top;">${bucketPill}</td>
+    </tr>`;
+  };
+  body.innerHTML = `
+    <div class="table-wrapper" style="border:none;">
+      <table>
+        <thead>
+          <tr>
+            <th>Task / Logged Comments</th>
+            <th>Assignee</th>
+            <th>Due</th>
+            <th>Done At</th>
+            <th>Timing</th>
+            <th>Bucket</th>
+          </tr>
+        </thead>
+        <tbody>${items.sort((a,b) => (b.done_at || b.created_at || '').localeCompare(a.done_at || a.created_at || '')).map(row).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+function closeTcaDrill() {
+  document.getElementById('tcaDrillModal').classList.remove('open');
+}
+
+// ── Admin per-employee assigned-task dashboard ─────────────
+// One collapsible card per employee with at least one assigned task.
+// Open by default for the user currently filtered in the user-tab strip
+// ('all' opens none); collapsed otherwise.
+const _empOpen = new Set(); // user_id set of expanded cards
+
+function toggleEmpCard(uid) {
+  if (_empOpen.has(uid)) _empOpen.delete(uid);
+  else _empOpen.add(uid);
+  renderAssignedByEmployee();
+}
+
+function renderAssignedByEmployee() {
+  const host = document.getElementById('assignedByEmployee');
+  if (!host) return;
+  if (session.role !== 'admin') { host.style.display = 'none'; return; }
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const assigned = allTasks.filter(t => t.assigned_by);
+  if (!assigned.length) { host.style.display = 'none'; return; }
+
+  // Group by user_id
+  const byUser = {};
+  assigned.forEach(t => {
+    const uid = t.user_id;
+    if (!byUser[uid]) {
+      const u = allUsers.find(x => x.id === uid);
+      byUser[uid] = {
+        id: uid,
+        name: u?.full_name || '—',
+        avatar: u?.avatar_url || null,
+        all: [], active: [], overdue: [], done: [],
+      };
+    }
+    byUser[uid].all.push(t);
+    const closed = t.status === 'done' || t.status === 'logged';
+    if (closed) byUser[uid].done.push(t);
+    else if (t.due_date && new Date(t.due_date) < today) byUser[uid].overdue.push(t);
+    else byUser[uid].active.push(t);
+  });
+  const employees = Object.values(byUser).sort((a,b) => b.all.length - a.all.length);
+
+  host.style.display = 'block';
+  host.innerHTML = `
+    <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">👥 Assigned Tasks · By Employee</div>
+    <div class="assigned-emp-grid">
+      ${employees.map(e => renderEmpCard(e, today)).join('')}
+    </div>`;
+}
+
+function renderEmpCard(e, today) {
+  const initials = e.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+  const avatarInner = e.avatar
+    ? `<img src="${e.avatar}" alt="${e.name}" onerror="this.outerHTML='${initials}'" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />`
+    : initials;
+  const isOpen = _empOpen.has(e.id);
+
+  const taskRow = (t) => {
+    const overdueDays = (t.due_date && new Date(t.due_date) < today)
+      ? Math.floor((today - new Date(t.due_date)) / 86400000) : 0;
+    const dueLabel = !t.due_date ? '<span style="color:var(--text-3);font-size:11px;">No due date</span>'
+      : overdueDays > 0 ? `<span style="color:var(--p-urgent);font-size:11px;font-weight:700;">⚠️ Overdue ${overdueDays}d</span>`
+      : `<span style="color:var(--text-3);font-size:11px;">📅 ${formatDate(t.due_date)}</span>`;
+    const projectChip = t.linked_project_id
+      ? `<span style="font-size:10px;color:var(--text-3);background:var(--bg-surface);padding:1px 6px;border-radius:999px;border:1px solid var(--border);margin-left:6px;">🔗 ${t.linked_project_id}</span>`
+      : '';
+    const status = (t.status === 'done' || t.status === 'logged')
+      ? `<span style="color:var(--success);font-size:11px;font-weight:700;">✓ ${t.status}</span>`
+      : t.status === 'on_hold' ? `<span style="color:var(--warning);font-size:11px;font-weight:700;">🚧 on hold</span>`
+      : '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);font-size:13px;">
+      <span style="font-size:13px;">${PRIORITY_ICONS[t.priority] || ''}</span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;">${t.title}</span>
+      ${projectChip}
+      ${status}
+      ${dueLabel}
+    </div>`;
+  };
+
+  return `
+    <div class="card" style="padding:0;overflow:hidden;">
+      <button onclick="toggleEmpCard('${e.id}')" style="all:unset;cursor:pointer;display:flex;align-items:center;gap:12px;padding:14px 16px;width:100%;box-sizing:border-box;">
+        <div class="user-avatar" data-user-id="${e.id}" style="width:40px;height:40px;font-size:13px;flex-shrink:0;overflow:hidden;">${avatarInner}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:800;font-size:14px;">${e.name}</div>
+          <div style="font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-top:2px;">
+            ${e.all.length} assigned · ${e.done.length} done${e.overdue.length ? ` · <span style="color:var(--p-urgent);">${e.overdue.length} overdue</span>` : ''}${e.active.length ? ` · ${e.active.length} active` : ''}
+          </div>
+        </div>
+        <span style="color:var(--text-3);font-size:14px;">${isOpen ? '▼' : '▶'}</span>
+      </button>
+      ${isOpen ? `
+        <div style="border-top:1px solid var(--border);">
+          ${e.overdue.length ? `<div style="padding:8px 16px;font-size:10px;font-weight:800;color:var(--p-urgent);text-transform:uppercase;letter-spacing:.06em;background:rgba(239,68,68,0.05);">⚠️ Overdue (${e.overdue.length})</div>${e.overdue.map(taskRow).join('')}` : ''}
+          ${e.active.length ? `<div style="padding:8px 16px;font-size:10px;font-weight:800;color:#60a5fa;text-transform:uppercase;letter-spacing:.06em;background:rgba(96,165,250,0.05);">🎯 Active (${e.active.length})</div>${e.active.map(taskRow).join('')}` : ''}
+          ${e.done.length ? `<div style="padding:8px 16px;font-size:10px;font-weight:800;color:var(--success);text-transform:uppercase;letter-spacing:.06em;background:rgba(34,197,94,0.05);">✓ Closed (${e.done.length})</div>${e.done.map(taskRow).join('')}` : ''}
+        </div>
+      ` : ''}
+    </div>`;
+}
+
+// ── Admin user filter ──────────────────────────────────────
+function buildAdminFilter() {
+  const tabs = document.getElementById('userFilterTabs');
+  const allBtn = document.createElement('button');
+  allBtn.className = 'uft active'; allBtn.textContent = 'All Members'; allBtn.dataset.uid = 'all';
+  allBtn.onclick = () => setActiveUser('all');
+  tabs.appendChild(allBtn);
+  allUsers.forEach(u => {
+    const btn = document.createElement('button');
+    btn.className = 'uft'; btn.textContent = u.full_name; btn.dataset.uid = u.id;
+    btn.onclick = () => setActiveUser(u.id);
+    tabs.appendChild(btn);
+  });
+}
+
+function setActiveUser(uid) {
+  activeUserId = uid;
+  document.querySelectorAll('.uft').forEach(b => b.classList.toggle('active', b.dataset.uid === uid));
+  renderStatusChips();
+  renderBoard();
+}
+
+// ── Render board ───────────────────────────────────────────
+function getVisibleTasks() {
+  let base;
+  if (session.role === 'admin' && activeUserId !== 'all') base = allTasks.filter(t => t.user_id === activeUserId);
+  else if (session.role !== 'admin') base = allTasks.filter(t => t.user_id === session.id);
+  else base = allTasks;
+
+  // Apply admin status filter
+  if (session.role === 'admin') {
+    if (statusFilter === 'all') return base;
+    if (statusFilter === 'active') return base.filter(t => t.status === 'pending' || t.status === 'on_hold');
+    return base.filter(t => t.status === statusFilter);
+  }
+  // Non-admin: only show active (pending + on_hold), done/logged are filtered out server-side already
+  return base;
+}
+
+function dueDateClass(due) {
+  if (!due) return '';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(due); d.setHours(0,0,0,0);
+  const diff = Math.floor((d - today) / 86400000);
+  if (diff < 0)  return 'due-overdue';
+  if (diff === 0) return 'due-today';
+  if (diff <= 3) return 'due-soon';
+  return '';
+}
+
+function dueDateLabel(due) {
+  if (!due) return '';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(due); d.setHours(0,0,0,0);
+  const diff = Math.floor((d - today) / 86400000);
+  if (diff < 0)  return `⚠️ Overdue by ${Math.abs(diff)}d`;
+  if (diff === 0) return '🔥 Due Today';
+  if (diff === 1) return '⏰ Due Tomorrow';
+  return `📅 Due ${formatDate(due)}`;
+}
+
+function renderBoard() {
+  renderStatusChips();
+  renderAssignedAnalytics();
+  renderAssignedByEmployee();
+  // Keep the Completion Analysis tab in sync when tasks change while it's visible
+  const analysisView = document.getElementById('view-analysis');
+  if (analysisView && analysisView.style.display !== 'none') renderCompletionAnalysis();
+  const tasks = getVisibleTasks();
+  // Split: my tasks vs assigned to me
+  const myTasks       = tasks.filter(t => !t.assigned_by || t.user_id === session.id && !t.assigned_by);
+  const assignedToMe  = tasks.filter(t => t.assigned_by && t.user_id === session.id);
+  // For admin viewing all: show all without split
+  const showSplit = session.role !== 'admin' || (activeUserId !== 'all');
+
+  const allVisible = tasks;
+
+  // Stat pills
+  const counts = { Urgent:0, Important:0, Medium:0, Low:0 };
+  allVisible.forEach(t => counts[t.priority]++);
+  document.getElementById('statPills').innerHTML = PRIORITY_ORDER.map(p => {
+    if (!counts[p]) return '';
+    const colors = { Urgent:'var(--p-urgent)', Important:'var(--p-important)', Medium:'var(--p-medium)', Low:'var(--p-low)' };
+    return `<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:999px;background:var(--bg-card);border:1px solid ${colors[p]}22;font-size:12px;font-weight:700;color:${colors[p]};">
+      ${PRIORITY_ICONS[p]} ${p} <span style="background:${colors[p]}22;padding:1px 7px;border-radius:999px;">${counts[p]}</span>
+    </span>`;
+  }).join('');
+
+  const board = document.getElementById('taskBoard');
+  if (!allVisible.length) {
+    board.innerHTML = `<div style="grid-column:1/-1;"><div class="empty-state"><div class="empty-icon">📌</div><div class="empty-text">No pending tasks</div><div class="empty-sub">Click "Add Task" to plan your priorities</div></div></div>`;
+    return;
+  }
+
+  const colors = { Urgent:'var(--p-urgent)', Important:'var(--p-important)', Medium:'var(--p-medium)', Low:'var(--p-low)' };
+
+  const renderLane = (taskList, priorities) => priorities.map(p => {
+    const lane = taskList.filter(t => t.priority === p);
+    if (!lane.length) return '';
+    return `<div style="margin-bottom:24px;">
+      <div class="section-hdr">
+        <span style="font-size:18px;">${PRIORITY_ICONS[p]}</span>
+        <span class="section-hdr-title" style="color:${colors[p]}">${p}</span>
+        <span class="section-count">${lane.length}</span>
+      </div>
+      <div class="task-lane">${lane.map(t => renderTaskCard(t)).join('')}</div>
+    </div>`;
+  }).join('');
+
+  if (session.role !== 'admin' && assignedToMe.length > 0) {
+    // User view: show "Assigned to me" section + own tasks
+    const ownTasks = allVisible.filter(t => !t.assigned_by);
+    board.innerHTML = `
+      <div>
+        ${assignedToMe.length ? `
+          <div class="assigned-section-header">📋 Assigned to Me <span style="font-size:11px;opacity:.7;">${assignedToMe.length} task${assignedToMe.length!==1?'s':''}</span></div>
+          ${renderLane(assignedToMe, ['Urgent','Important','Medium','Low'])}
+          <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;" />
+          <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:16px;">📌 My Tasks</div>
+        ` : ''}
+        ${renderLane(ownTasks, ['Urgent','Important'])}
+      </div>
+      <div>${renderLane(ownTasks, ['Medium','Low'])}</div>
+    `;
+  } else {
+    // Admin view or no assigned tasks
+    board.innerHTML = `
+      <div>${renderLane(allVisible, ['Urgent','Important'])}</div>
+      <div>${renderLane(allVisible, ['Medium','Low'])}</div>
+    `;
+  }
+}
+
+function renderTaskCard(t) {
+  const ownerName = (session.role === 'admin' && activeUserId === 'all')
+    ? `<span style="background:var(--bg-surface);padding:2px 8px;border-radius:999px;border:1px solid var(--border);">👤 ${t.profiles?.full_name || '—'}</span>`
+    : '';
+  const dClass = dueDateClass(t.due_date);
+  const dLabel = t.due_date ? `<span class="${dClass}">${dueDateLabel(t.due_date)}</span>` : '';
+
+  const assignedTag = t.assigned_by
+    ? `<span class="assigned-by-tag">📋 Assigned by admin</span>`
+    : '';
+
+  const onHold = t.status === 'on_hold';
+  const holdPill = onHold
+    ? `<span class="p-badge" style="background:rgba(245,158,11,0.15); border-color:#f59e0b; color:#f59e0b;" title="${(t.hold_reason || '').replace(/"/g,'&quot;')}">🚧 On Hold</span>`
+    : '';
+  const holdReasonLine = onHold && t.hold_reason
+    ? `<div style="font-size:11px;color:var(--text-3);margin-top:6px;"><strong style="color:#f59e0b;">Reason:</strong> ${t.hold_reason.replace(/</g,'&lt;')}</div>`
+    : '';
+
+  const cardClass = (t.assigned_by ? 'task-card p-'+t.priority+' assigned' : 'task-card p-'+t.priority) + (onHold ? ' on-hold' : '');
+  const titleEscaped = t.title.replace(/'/g,"\\'");
+
+  const holdBtn = onHold
+    ? `<button class="btn btn-secondary btn-sm" title="Resume task" onclick="resumeTask('${t.id}')">▶ Resume</button>`
+    : `<button class="btn btn-secondary btn-sm" title="Put on hold" onclick="openHoldModal('${t.id}','${titleEscaped}')">🚧 Hold</button>`;
+
+  return `<div class="${cardClass}">
+    <div class="task-card-body">
+      <div class="task-title">${t.title}</div>
+      <div class="task-meta">
+        <span class="p-badge p-${t.priority}">${PRIORITY_ICONS[t.priority]} ${t.priority}</span>
+        ${holdPill}
+        ${dLabel}
+        ${ownerName}
+        ${assignedTag}
+      </div>
+      ${holdReasonLine}
+    </div>
+    <div class="task-actions">
+      ${onHold ? '' : `<button class="btn btn-success btn-sm" title="Move to Work Log" onclick="openLogModal('${t.id}','${titleEscaped}')"  style="white-space:nowrap;">📝 Log</button>`}
+      ${holdBtn}
+      <button class="btn btn-danger btn-sm btn-icon" title="Delete" onclick="openDeleteTaskModal('${t.id}','${titleEscaped}')">🗑️</button>
+    </div>
+  </div>`;
+}
+
+// ── Add Task Modal ─────────────────────────────────────────
+function openAddModal() {
+  document.getElementById('newTaskTitle').value = '';
+  document.getElementById('newTaskDue').value = '';
+  document.getElementById('newTaskPriority').value = '';
+  document.getElementById('addTaskError').classList.remove('show');
+  selectedPriority = '';
+  ['Urgent','Important','Medium','Low'].forEach(p => document.getElementById('pick-'+p).className = 'priority-pick');
+  document.getElementById('addTaskModal').classList.add('open');
+  document.getElementById('newTaskTitle').focus();
+}
+function closeAddModal() { document.getElementById('addTaskModal').classList.remove('open'); }
+
+function selectPriority(p) {
+  selectedPriority = p;
+  document.getElementById('newTaskPriority').value = p;
+  ['Urgent','Important','Medium','Low'].forEach(x => {
+    document.getElementById('pick-'+x).className = 'priority-pick' + (x === p ? ' sel-'+p : '');
+  });
+}
+
+async function saveTask() {
+  const btn = document.getElementById('addTaskBtn');
+  const err = document.getElementById('addTaskError');
+  err.classList.remove('show');
+  const title = document.getElementById('newTaskTitle').value.trim();
+  const due   = document.getElementById('newTaskDue').value || null;
+  if (!title)             { err.textContent = 'Task title is required'; err.classList.add('show'); return; }
+  if (!selectedPriority)  { err.textContent = 'Please select a priority'; err.classList.add('show'); return; }
+
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const { error } = await db.from('priority_tasks').insert({
+    user_id: session.id, title, priority: selectedPriority, due_date: due, status: 'pending'
+  });
+  if (error) { err.textContent = error.message; err.classList.add('show'); }
+  else { showToast('Task added! 📌', 'success'); closeAddModal(); await loadTasks(); renderBoard(); }
+  btn.disabled = false; btn.innerHTML = '📌 Add Task';
+}
+
+// ── Move to Log Modal ──────────────────────────────────────
+let logModalProjectLinkMandatory = false;
+async function ensureLogModalProjects() {
+  // Populate linked-project dropdown once
+  const sel = document.getElementById('logTaskLinkedProject');
+  if (sel.dataset.loaded === '1') return;
+  const { data } = await db
+    .from('projects')
+    .select('proj_unique_id, project_name, project_number')
+    .order('project_number');
+  (data || []).forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.proj_unique_id || '';
+    opt.textContent = p.project_name;
+    sel.appendChild(opt);
+  });
+  sel.dataset.loaded = '1';
+
+  // Respect app_settings.project_link_mandatory (same behaviour as log.html)
+  try {
+    const { data: s } = await db.from('app_settings').select('value').eq('key', 'project_link_mandatory').maybeSingle();
+    logModalProjectLinkMandatory = s?.value === 'true';
+    if (logModalProjectLinkMandatory) {
+      document.getElementById('logTaskProjectReq').style.display = 'inline';
+      document.getElementById('logTaskProjectHint').textContent = 'Required — admin has made project linking mandatory.';
+    }
+  } catch (_) {}
+}
+
+function recalcLogModalWeek() {
+  const d = document.getElementById('logTaskDate').value;
+  if (!d) return;
+  document.getElementById('logTaskMonth').value = getMonthName(d);
+  document.getElementById('logTaskWeek').value = getWeekNumber(d);
+}
+
+async function openLogModal(id, title) {
+  loggingTaskId = id;
+  const today = getTodayInfo();
+  document.getElementById('logTaskTitle').value       = title;
+  document.getElementById('logTaskDesc').value        = '';
+  document.getElementById('logTaskDate').value        = today.date;
+  document.getElementById('logTaskHours').value       = '';
+  document.getElementById('logTaskCategory').value    = '';
+  document.getElementById('logTaskSubCategory').value = '';
+  document.getElementById('logTaskAccomp').value      = '';
+  document.getElementById('logTaskNotes').value       = '';
+  document.getElementById('logTaskCompleted').checked = false;
+  document.getElementById('logTaskLinkedProject').value = '';
+  document.getElementById('logTaskMonth').value       = today.month;
+  document.getElementById('logTaskWeek').value        = today.week;
+  document.getElementById('logModalError').classList.remove('show');
+
+  // Populate subcategory dropdown from admin-managed categories.
+  const sel = document.getElementById('logTaskSubCategory');
+  sel.innerHTML = '<option value="">Select sub-category…</option>';
+  Object.keys(allSubcats).forEach(cat => {
+    const subs = allSubcats[cat] || [];
+    if (!subs.length) return;
+    const group = document.createElement('optgroup');
+    group.label = (CATEGORY_ICONS[cat] || '📁') + ' ' + cat;
+    subs.forEach(name => {
+      const opt = new Option(name, name);
+      opt.dataset.cat = cat;
+      group.appendChild(opt);
+    });
+    sel.appendChild(group);
+  });
+
+  // Wait for the project list to populate, then pre-select the project the
+  // admin linked at assign time (if any).
+  await ensureLogModalProjects();
+  const task = allTasks.find(t => t.id === id);
+  if (task?.linked_project_id) {
+    document.getElementById('logTaskLinkedProject').value = task.linked_project_id;
+  }
+  document.getElementById('logModal').classList.add('open');
+}
+
+function onSubcatChange() {
+  const sel = document.getElementById('logTaskSubCategory');
+  const opt = sel.options[sel.selectedIndex];
+  document.getElementById('logTaskCategory').value = opt?.dataset?.cat || '';
+}
+function closeLogModal() { document.getElementById('logModal').classList.remove('open'); loggingTaskId = null; }
+
+// ── On-hold flow ──────────────────────────────────────────
+let holdingTaskId = null;
+function openHoldModal(id, title) {
+  holdingTaskId = id;
+  document.getElementById('holdTaskTitle').textContent = title;
+  document.getElementById('holdReasonText').value = '';
+  document.getElementById('holdError').classList.remove('show');
+  document.getElementById('holdModal').classList.add('open');
+  document.getElementById('holdReasonText').focus();
+}
+function closeHoldModal() { document.getElementById('holdModal').classList.remove('open'); holdingTaskId = null; }
+async function confirmHold() {
+  const reason = document.getElementById('holdReasonText').value.trim();
+  const err = document.getElementById('holdError');
+  err.classList.remove('show');
+  if (!reason) { err.textContent = 'Please enter a reason.'; err.classList.add('show'); return; }
+  if (!holdingTaskId) return;
+  const btn = document.getElementById('confirmHoldBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const { error } = await db.from('priority_tasks').update({
+    status: 'on_hold',
+    hold_reason: reason,
+    hold_set_at: new Date().toISOString(),
+    hold_set_by: session.id,
+  }).eq('id', holdingTaskId);
+  btn.disabled = false; btn.textContent = '🚧 Put On Hold';
+  if (error) { err.textContent = error.message; err.classList.add('show'); return; }
+  showToast('Task put on hold', 'success');
+  closeHoldModal();
+  await loadTasks();
+  renderBoard();
+}
+async function resumeTask(id) {
+  const { error } = await db.from('priority_tasks').update({
+    status: 'pending',
+    hold_reason: null,
+    hold_set_at: null,
+    hold_set_by: null,
+  }).eq('id', id);
+  if (error) { showToast('Failed to resume: ' + error.message, 'error'); return; }
+  showToast('Task resumed', 'success');
+  await loadTasks();
+  renderBoard();
+}
+
+async function submitTaskLog() {
+  const btn = document.getElementById('logTaskBtn');
+  const err = document.getElementById('logModalError');
+  err.classList.remove('show');
+  const dateVal  = document.getElementById('logTaskDate').value;
+  const hours    = parseFloat(document.getElementById('logTaskHours').value);
+  const category = document.getElementById('logTaskCategory').value;
+  const title    = document.getElementById('logTaskTitle').value.trim();
+  const subcat   = document.getElementById('logTaskSubCategory').value;
+
+  if (!title)    { err.textContent = 'Title is required';               err.classList.add('show'); return; }
+  if (!subcat)   { err.textContent = 'Please select a sub-category';    err.classList.add('show'); return; }
+  if (!category) { err.textContent = 'Sub-category has no parent category — please re-select'; err.classList.add('show'); return; }
+  if (!hours || hours <= 0) { err.textContent = 'Enter valid hours';    err.classList.add('show'); return; }
+
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  // Validate project link if required
+  const linkedProjectId = document.getElementById('logTaskLinkedProject').value || null;
+  if (logModalProjectLinkMandatory && category === 'Project' && !linkedProjectId) {
+    err.textContent = 'Please link this task to a project (required).';
+    err.classList.add('show');
+    return;
+  }
+
+  // Use whatever week the user sees in the field (auto-calculated from date, but user can override)
+  const weekVal = parseInt(document.getElementById('logTaskWeek').value) || getWeekNumber(dateVal);
+
+  // Insert task log
+  const accomp = document.getElementById('logTaskAccomp').value.trim();
+  const notes  = document.getElementById('logTaskNotes').value.trim();
+  const { error: logErr } = await db.from('task_logs').insert({
+    user_id:          session.id,
+    team_member:      session.fullName,
+    log_date:         dateVal,
+    month:            getMonthName(dateVal),
+    week_number:      weekVal,
+    task_project:     title,
+    task_description: document.getElementById('logTaskDesc').value.trim(),
+    category,
+    sub_category:     document.getElementById('logTaskSubCategory').value,
+    hours_spent:      hours,
+    accomplishment:   accomp,
+    comments_notes:   notes,
+    is_completed:     document.getElementById('logTaskCompleted').checked,
+    linked_project_id: linkedProjectId,
+    // Link this work log back to the priority task it was logged against
+    // so admin views (Task Completion Analysis drill-down) can surface
+    // per-assignment comments. Falls back gracefully if the column
+    // doesn't exist yet — the column is added by the 2026-04-26 migration.
+    priority_task_id: loggingTaskId || null,
+    // Non-empty accomplishment requires admin approval before counting.
+    ...(accomp ? { accomplishment_status: 'pending' } : {}),
+  });
+
+  if (logErr) { err.textContent = logErr.message; err.classList.add('show'); btn.disabled=false; btn.innerHTML='💾 Save to Work Log'; return; }
+
+  // If the user marked the task as completed in this log, flip the priority
+  // task to 'logged' and stamp done_at for the assigned-task analytics.
+  // Otherwise the task stays 'pending' so it can be logged against multiple
+  // times (multi-day tasks).
+  if (document.getElementById('logTaskCompleted').checked && loggingTaskId) {
+    await db.from('priority_tasks').update({
+      status: 'logged',
+      done_at: new Date().toISOString(),
+    }).eq('id', loggingTaskId);
+  }
+
+  showToast('Logged to work log! ✅', 'success');
+  closeLogModal();
+  await loadTasks();
+  renderBoard();
+  loadSidebarStats(session.id);
+  btn.disabled = false; btn.innerHTML = '💾 Save to Work Log';
+}
+
+// ── Delete Task Modal ──────────────────────────────────────
+function openDeleteTaskModal(id, title) {
+  deletingTaskId = id;
+  document.getElementById('deleteTaskName').textContent = title;
+  document.getElementById('deleteTaskModal').classList.add('open');
+  document.getElementById('confirmDeleteTaskBtn').onclick = confirmDeleteTask;
+}
+function closeDeleteTaskModal() { document.getElementById('deleteTaskModal').classList.remove('open'); deletingTaskId = null; }
+
+async function confirmDeleteTask() {
+  const btn = document.getElementById('confirmDeleteTaskBtn');
+  btn.disabled = true; btn.textContent = 'Deleting…';
+  const { error } = await db.from('priority_tasks').delete().eq('id', deletingTaskId);
+  if (error) showToast('Failed to delete: ' + error.message, 'error');
+  else { showToast('Task deleted', 'success'); closeDeleteTaskModal(); await loadTasks(); renderBoard(); }
+  btn.disabled = false; btn.textContent = '🗑️ Delete';
+}
+
+// ── Assign Task Modal ─────────────────────────────────────
+function openAssignModal() {
+  selectedAssignPriority = '';
+  document.getElementById('assignTaskTitle').value    = '';
+  document.getElementById('assignTaskDue').value      = '';
+  document.getElementById('assignTaskPriority').value = '';
+  document.getElementById('assignTaskLinkedProject').value = '';
+  document.getElementById('assignTaskError').classList.remove('show');
+  ['Urgent','Important','Medium','Low'].forEach(p => {
+    document.getElementById('apick-'+p).className = 'priority-pick';
+  });
+  ensureAssignModalProjects();
+  document.getElementById('assignTaskModal').classList.add('open');
+}
+
+async function ensureAssignModalProjects() {
+  const sel = document.getElementById('assignTaskLinkedProject');
+  if (!sel || sel.dataset.loaded === '1') return;
+  const { data } = await db
+    .from('projects')
+    .select('proj_unique_id, project_name, project_number')
+    .order('project_number');
+  (data || []).forEach(p => {
+    if (!p.proj_unique_id) return;
+    const opt = document.createElement('option');
+    opt.value = p.proj_unique_id;
+    opt.textContent = p.project_name;
+    sel.appendChild(opt);
+  });
+  sel.dataset.loaded = '1';
+}
+function closeAssignModal() { document.getElementById('assignTaskModal').classList.remove('open'); }
+
+function selectAssignPriority(p) {
+  selectedAssignPriority = p;
+  document.getElementById('assignTaskPriority').value = p;
+  ['Urgent','Important','Medium','Low'].forEach(x => {
+    document.getElementById('apick-'+x).className = 'priority-pick' + (x===p?' sel-'+p:'');
+  });
+}
+
+async function saveAssignedTask() {
+  const btn   = document.getElementById('assignTaskBtn2');
+  const err   = document.getElementById('assignTaskError');
+  err.classList.remove('show');
+  const toUid = document.getElementById('assignToUser').value;
+  const title = document.getElementById('assignTaskTitle').value.trim();
+  const due   = document.getElementById('assignTaskDue').value || null;
+  if (!toUid)               { err.textContent = 'Select an employee'; err.classList.add('show'); return; }
+  if (!title)               { err.textContent = 'Task title is required'; err.classList.add('show'); return; }
+  if (!selectedAssignPriority) { err.textContent = 'Select a priority'; err.classList.add('show'); return; }
+  btn.disabled = true; btn.textContent = 'Assigning…';
+  const linkedProjectId = document.getElementById('assignTaskLinkedProject').value || null;
+  const { error } = await db.from('priority_tasks').insert({
+    user_id:     toUid,
+    assigned_by: session.id,
+    title, priority: selectedAssignPriority, due_date: due, status: 'pending',
+    linked_project_id: linkedProjectId,
+  });
+  if (error) { err.textContent = error.message; err.classList.add('show'); }
+  else {
+    showToast('Task assigned!', 'success');
+    // Send email notification
+    try {
+      const [ejsRes, userRes] = await Promise.all([
+        db.from('app_settings').select('key,value').in('key',['emailjs_service_id','emailjs_template_id','emailjs_public_key']),
+        db.from('profiles').select('full_name,email').eq('id', toUid).maybeSingle()
+      ]);
+      const cfg = {};
+      (ejsRes.data||[]).forEach(r => {
+        if (r.key==='emailjs_service_id')  cfg.sid = r.value;
+        if (r.key==='emailjs_template_id') cfg.tid = r.value;
+        if (r.key==='emailjs_public_key')  cfg.pk  = r.value;
+      });
+      const toUser = userRes.data;
+      if (cfg.sid && cfg.tid && cfg.pk && toUser?.email) {
+        emailjs.init({ publicKey: cfg.pk });
+        await emailjs.send(cfg.sid, cfg.tid, {
+          to_email:      toUser.email,
+          to_name:       toUser.full_name,
+          from_name:     session.fullName,
+          task_title:    title,
+          task_priority: selectedAssignPriority,
+          task_due:      due || 'No due date',
+          app_url:       window.location.origin + '/worktracker/tasks.html',
+        });
+        showToast('Task assigned + email sent! ✅', 'success');
+      }
+    } catch(emailErr) {
+      console.warn('Email failed:', emailErr);
+    }
+    closeAssignModal();
+    await loadTasks();
+    renderBoard();
+  }
+  btn.disabled = false; btn.textContent = '📋 Assign Task';
+}
+
+document.getElementById('assignTaskModal')?.addEventListener('click', e => { if (e.target===e.currentTarget) closeAssignModal(); });
+
+// Backdrop close
+['addTaskModal','logModal','deleteTaskModal','holdModal'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('click', e => {
+    if (e.target === e.currentTarget) {
+      if (id === 'addTaskModal') closeAddModal();
+      else if (id === 'logModal') closeLogModal();
+      else if (id === 'holdModal') closeHoldModal();
+      else closeDeleteTaskModal();
+    }
+  });
+});
+
+init();
+</script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+    }
+  </script>
+</body>
+</html>

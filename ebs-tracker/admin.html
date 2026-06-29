@@ -1,0 +1,3462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="EBS Tracker" />
+  <meta name="theme-color" content="#0c0a08" />
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="apple-touch-startup-image" href="icon-512.png" />
+  <title>EBS Tracker — Admin Panel</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    /* Chart.js luxury color overrides */
+    :root {
+      --chart-grid: rgba(255,255,255,0.05);
+      --chart-tick: rgba(240,235,226,0.35);
+    }
+    body.light-mode {
+      --chart-grid: rgba(26,22,18,0.06);
+      --chart-tick: rgba(90,82,74,0.5);
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <style>
+    .user-card {
+      display:flex;align-items:center;gap:14px;padding:14px;
+      background:var(--bg-surface);border:1px solid var(--border);
+      border-radius:var(--radius-lg);transition:0.2s;
+    }
+    .user-card:hover { background:var(--bg-hover);border-color:var(--border-light); }
+    .user-card-info { flex:1; }
+    .user-card-name { font-weight:700;font-size:14px; }
+    .user-card-meta { font-size:12px;color:var(--text-3);margin-top:2px; }
+    .admin-tag { display:inline-block;padding:2px 8px;background:rgba(245,158,11,0.15);color:var(--gold);border-radius:999px;font-size:10px;font-weight:700;border:1px solid rgba(245,158,11,0.3);margin-left:8px; }
+    .user-detail-header { background:linear-gradient(135deg,var(--bg-card),var(--bg-hover));border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:20px;margin-bottom:20px;display:flex;align-items:center;gap:16px; }
+  </style>
+</head>
+<body>
+<script>document.addEventListener("DOMContentLoaded",()=>{if(typeof initTheme==="function"){initTheme();injectThemeToggle();}});</script>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+<div class="app-wrapper">
+  <button class="menu-toggle" id="menuToggle">☰</button>
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="main-content fade-in">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">👑 Admin Panel</h1>
+        <p class="page-subtitle">Manage users, review records, compare performance</p>
+      </div>
+    </div>
+
+    <!-- Admin Tabs -->
+    <div class="admin-tabs">
+      <button class="admin-tab active" onclick="switchTab('users')">👥 Users</button>
+      <button class="admin-tab" onclick="switchTab('records')">📋 Records</button>
+      <button class="admin-tab" onclick="switchTab('approvals')">🕒 Approvals <span id="approvalsCountBadge" style="display:none;background:var(--warning);color:#080600;font-size:10px;font-weight:800;padding:1px 6px;border-radius:999px;margin-left:4px;"></span></button>
+      <button class="admin-tab" onclick="switchTab('comparison')">👥 Team Overview</button>
+      <button class="admin-tab" onclick="switchTab('analysis')">🔬 Employee Analysis</button>
+      <button class="admin-tab" onclick="switchTab('export')">📤 Export</button>
+      <button class="admin-tab" onclick="switchTab('settings')">⚙️ Settings</button>
+      <button class="admin-tab" onclick="switchTab('badges')">🏅 Badges</button>
+      <button class="admin-tab" onclick="switchTab('project-analytics')">📊 Project Analytics</button>
+    </div>
+
+    <!-- TAB: USERS -->
+    <div id="tab-users" class="tab-content">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+        <!-- Create User -->
+        <div class="card">
+          <div class="card-title-lg">➕ Create New User</div>
+          <p style="font-size:12px;color:var(--text-3);margin-bottom:16px;">Creates a Supabase Auth account. The user can log in to both the Project Website and EBS Tracker with this email + password.</p>
+          <div class="form-group">
+            <label class="form-label">Full Name <span class="req">*</span></label>
+            <input type="text" id="newFullName" class="form-control" placeholder="e.g. Sarah Ahmed" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email Address <span class="req">*</span></label>
+            <input type="email" id="newEmail" class="form-control" placeholder="user@company.com" />
+            <div class="form-hint">Used to log in to both apps</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password <span class="req">*</span></label>
+            <input type="password" id="newPassword" class="form-control" placeholder="Min. 6 characters" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Application Permission</label>
+            <select id="newRole" class="form-control">
+              <option value="user">User — log tasks, view projects</option>
+              <option value="admin">Admin — full access to everything</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Employee Role(s)</label>
+            <div class="chip-input" id="newEmployeeRolesChips">
+              <input type="text" id="newEmployeeRolesInput" data-chip-state="newEmployeeRoles" placeholder="Type a role and press Enter…" autocomplete="off" />
+            </div>
+            <div class="form-hint">Free-form job titles — Software Developer, Project Manager, etc. Multiple allowed.</div>
+          </div>
+          <div class="login-error" id="createError" style="margin-bottom:12px;"></div>
+          <button class="btn btn-primary" id="createUserBtn" onclick="createUser()" style="width:100%;justify-content:center;">
+            ⚔️ Create User
+          </button>
+        </div>
+
+        <!-- User List -->
+        <div class="card">
+          <div class="card-title-lg">👥 All Users</div>
+          <div id="userList" style="display:flex;flex-direction:column;gap:10px;">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- User Detail (shown when a user is selected) -->
+      <div id="userDetailSection" style="margin-top:24px;display:none;">
+        <div class="user-detail-header" id="userDetailHeader"></div>
+        <div class="kpi-grid" id="userDetailKPIs"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <span class="card-title-lg mb-0" id="userDetailTitle">Records</span>
+          <button class="btn btn-success btn-sm" onclick="exportUserCSV()">📤 Export CSV</button>
+        </div>
+        <div class="table-wrapper" id="userDetailTable"></div>
+      </div>
+    </div>
+
+    <!-- TAB: RECORDS -->
+    <div id="tab-records" class="tab-content" style="display:none;">
+      <div class="filter-bar" style="margin-bottom:20px;">
+        <span class="filter-label">Member:</span>
+        <select class="form-control" id="recFilterUser" style="max-width:180px;"></select>
+        <span class="filter-label">Category:</span>
+        <select class="form-control" id="recFilterCat" style="max-width:150px;" onchange="onRecCatChange()">
+          <option value="">All Categories</option>
+        </select>
+        <select class="form-control" id="recFilterSubcat" style="max-width:180px;">
+          <option value="">All Sub-Categories</option>
+        </select>
+        <span class="filter-label">Month:</span>
+        <select class="form-control" id="recFilterMonth" style="max-width:150px;"></select>
+        <input type="text" class="form-control" id="recSearch" placeholder="🔍 Search…" style="max-width:180px;" />
+        <button class="btn btn-secondary btn-sm" onclick="clearRecFilters()">Clear</button>
+      </div>
+
+      <div class="card" style="padding:0;">
+        <div style="padding:14px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);">
+          <span class="card-title-lg mb-0">All Task Logs</span>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span style="font-size:12px;color:var(--text-3);" id="recRowCount">Loading…</span>
+            <button class="btn btn-success btn-sm" onclick="exportAllCSV()">📤 Export All CSV</button>
+          </div>
+        </div>
+        <div class="table-wrapper" style="border:none;border-radius:0;">
+          <table>
+            <thead><tr>
+              <th>Date</th><th>Team Member</th><th>Task</th><th>Sub-Category</th>
+              <th>Hours</th><th>Accomplishment</th><th>Notes</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="recTableBody">
+              <tr><td colspan="8"><div class="loading"><div class="spinner"></div> Loading…</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: PENDING APPROVALS -->
+    <div id="tab-approvals" class="tab-content" style="display:none;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <h2 class="page-title" style="font-size:18px;margin:0;">🕒 Accomplishment Approvals</h2>
+          <p class="page-subtitle" style="margin:4px 0 0;">Approve or reject Key Accomplishments. Use the filter to review past decisions.</p>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="loadApprovalsTab()">🔄 Refresh</button>
+      </div>
+
+      <!-- Status filter chips — Pending (default), Approved, Rejected, All -->
+      <div id="approvalsFilterBar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;"></div>
+
+      <div id="approvalsList" style="display:flex;flex-direction:column;gap:12px;">
+        <div class="loading"><div class="spinner"></div> Loading…</div>
+      </div>
+    </div>
+
+    <!-- Reject reason modal -->
+    <div id="rejectReasonModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center;padding:20px;">
+      <div class="card" style="max-width:420px;width:100%;">
+        <div class="card-title-lg" style="margin-bottom:14px;">⛔ Reject Accomplishment</div>
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:12px;" id="rejectReasonContext"></div>
+        <textarea id="rejectReasonText" class="form-control" rows="3" placeholder="Reason (visible to the user)…"></textarea>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+          <button class="btn btn-secondary btn-sm" onclick="closeRejectModal()">Cancel</button>
+          <button class="btn btn-danger btn-sm" onclick="confirmRejectApproval()">⛔ Reject</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: COMPARISON -->
+    <div id="tab-comparison" class="tab-content" style="display:none;">
+
+      <!-- Filter bar -->
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:28px;">
+        <div style="display:flex;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:4px;gap:4px;">
+          <button class="comp-period-btn active" data-val="all" onclick="setPeriod('all')">All Time</button>
+          <button class="comp-period-btn" data-val="month" onclick="setPeriod('month')">By Month</button>
+          <button class="comp-period-btn" data-val="week" onclick="setPeriod('week')">This Week</button>
+        </div>
+        <select class="form-control" id="compMonth" style="max-width:160px;display:none;" onchange="renderComparison()">
+          <option value="">All Months</option>
+        </select>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+          <span id="compPeriodLabel" style="font-size:12px;color:var(--text-3);font-weight:500;"></span>
+          <button class="btn btn-secondary btn-sm" onclick="loadAllLogs().then(renderComparison)" title="Reload from database">🔄 Refresh</button>
+          <button class="btn btn-success btn-sm" onclick="exportAllCSV()">📤 Export</button>
+        </div>
+      </div>
+
+      <!-- Per-employee dashboard grid. Each card is independent — no cross-employee ranking. -->
+      <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px;">👤 Employee Dashboards</div>
+      <div id="compGrid"></div>
+
+      <!-- Drill-down modal — opened from a category bar click -->
+      <div id="drillDownSection" style="display:none;margin-top:28px;">
+        <div class="card" style="padding:0;">
+          <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);">
+            <span id="drillDownTitle" class="card-title-lg mb-0"></span>
+            <button class="btn btn-secondary btn-sm" onclick="closeDrillDown()">✕ Close</button>
+          </div>
+          <div class="table-wrapper" style="border:none;border-radius:0;">
+            <table>
+              <thead><tr><th>Date</th><th>Task</th><th>Sub-Category</th><th>Hours</th><th>Accomplishment</th></tr></thead>
+              <tbody id="drillDownBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <style>
+      /* .comp-period-btn rules live in style.css (with light-mode override).
+         Don't redefine them here — duplicating with `color:#fff` made the active
+         label invisible on the white gradient background in dark mode. */
+      #compGrid { display:grid;grid-template-columns:repeat(auto-fill,minmax(min(520px,100%),1fr));gap:20px; }
+      .emp-dash-card { border-radius:var(--radius-lg);border:1px solid var(--border);background:var(--bg-card);overflow:hidden;display:flex;flex-direction:column;min-width:0; }
+      .emp-dash-header { padding:18px 18px 14px;display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--border); }
+      .emp-dash-section { padding:14px 18px;border-bottom:1px solid var(--border);min-width:0; }
+      .emp-dash-section:last-child { border-bottom:none; }
+      .emp-dash-stats { display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--border); }
+      .emp-dash-stat { padding:12px 8px;text-align:center;border-right:1px solid var(--border); }
+      .emp-dash-stat:last-child { border-right:none; }
+      .emp-dash-stat .v { font-size:18px;font-weight:800;line-height:1;color:var(--text-1); }
+      .emp-dash-stat .l { font-size:10px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-top:4px; }
+      .emp-charts-pair { display:grid;grid-template-columns:1fr 1fr;gap:14px; }
+      .trend-toggle { display:inline-flex;background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px;flex-shrink:0; }
+      .trend-btn { padding:4px 10px;border-radius:6px;font-size:10px;font-weight:600;border:none;background:transparent;color:var(--text-3);cursor:pointer;transition:.15s; }
+      .trend-btn.active { background:linear-gradient(135deg,var(--accent-dark),var(--accent));color:#080600; }
+      .trend-btn:hover:not(.active) { color:var(--text-1); }
+      body.light-mode .trend-btn.active { background:linear-gradient(135deg,#5C4128,#7A5A38);color:#FAF9F6; }
+
+      @media (max-width: 640px) {
+        .emp-dash-header { padding:14px; }
+        .emp-dash-section { padding:12px 14px; }
+        .emp-dash-stats { grid-template-columns:repeat(2,1fr); }
+        .emp-dash-stat:nth-child(2) { border-right:none; }
+        .emp-dash-stat:nth-child(-n+2) { border-bottom:1px solid var(--border); }
+        .emp-charts-pair { grid-template-columns:1fr;gap:18px; }
+        .trend-toggle { padding:2px;gap:1px; }
+        .trend-btn { padding:4px 8px;font-size:10px; }
+      }
+    </style>
+
+    <!-- TAB: EMPLOYEE ANALYSIS -->
+    <div id="tab-analysis" class="tab-content" style="display:none;">
+      <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:24px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Select Employee</div>
+          <div id="analysisUserButtons" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+        </div>
+        <div id="analysisPeriodInfo" style="font-size:12px;color:var(--text-3);align-self:center;"></div>
+      </div>
+      <style>
+        .ana-user-btn { padding:8px 14px;border-radius:999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-2);font-size:12px;font-weight:600;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:8px;font-family:inherit; }
+        .ana-user-btn:hover { color:var(--text-1);border-color:rgba(255,255,255,0.32); }
+        .ana-user-btn.active { background:linear-gradient(135deg,var(--accent-dark),var(--accent));color:#080600;border-color:transparent;box-shadow:0 6px 18px -10px rgba(255,255,255,0.6); }
+        body.light-mode .ana-user-btn.active { background:linear-gradient(135deg,#5C4128,#7A5A38);color:#FAF9F6; }
+        body.light-mode .ana-user-btn:hover { border-color:rgba(26,22,18,0.32); }
+        .ana-user-btn .av { width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.12);font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;overflow:hidden; }
+        .ana-user-btn .av img { width:100%;height:100%;object-fit:cover; }
+      </style>
+      <div id="analysisContent">
+        <div class="empty-state"><div class="empty-icon">🔬</div><div class="empty-text">Pick an employee above</div><div class="empty-sub">Their full performance dashboard will appear here</div></div>
+      </div>
+    </div>
+
+    <!-- TAB: SETTINGS -->
+    <div id="tab-settings" class="tab-content" style="display:none;">
+
+      <!-- War Days + Tracker Config -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+        <div class="card">
+          <div class="card-title-lg">⚠️ War / Conflict Days Off</div>
+          <p style="color:var(--text-2);font-size:13px;margin-bottom:16px;line-height:1.5;">
+            Add specific dates or date ranges when the whole team was off due to war or conflict.
+            These are excluded from <strong>everyone's</strong> working day count and expected hours.
+          </p>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1.5fr auto;gap:12px;align-items:end;margin-bottom:16px;flex-wrap:wrap;">
+            <div>
+              <label class="form-label">From</label>
+              <input type="date" id="warRangeStart" class="form-control" />
+            </div>
+            <div>
+              <label class="form-label">To</label>
+              <input type="date" id="warRangeEnd" class="form-control" />
+            </div>
+            <div>
+              <label class="form-label">Label (optional)</label>
+              <input type="text" id="warRangeLabel" class="form-control" placeholder="e.g. Operation X, April Conflict" />
+            </div>
+            <button class="btn btn-primary" onclick="addWarRange()" style="margin-top:auto;white-space:nowrap;">➕ Add</button>
+          </div>
+          <div id="warRangeList" style="display:flex;flex-direction:column;gap:8px;">
+            <div class="loading"><div class="spinner"></div> Loading…</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title-lg">📅 Tracker Config</div>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg-surface);border-radius:var(--radius-sm);border:1px solid var(--border);">
+              <span style="color:var(--text-3);">Start Date</span>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="date" id="trackerStartInput" class="form-control" style="width:150px;padding:4px 8px;font-size:12px;" />
+                <button class="btn btn-primary btn-sm" onclick="saveTrackerStart()">Save</button>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg-surface);border-radius:var(--radius-sm);border:1px solid var(--border);"><span style="color:var(--text-3);">Weekends</span><strong>Fri &amp; Sat (fixed)</strong></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg-surface);border-radius:var(--radius-sm);border:1px solid var(--border);"><span style="color:var(--text-3);">Ramadan</span><strong class="ramadan-value">Feb 18–Mar 20, 6h (fixed)</strong></div>
+            <style>
+              /* Ramadan value reads against both themes — pale purple on dark, deep purple on cream */
+              .ramadan-value { color:#d8b4fe; }
+              body.light-mode .ramadan-value { color:#6d28d9; }
+            </style>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg-surface);border-radius:var(--radius-sm);border:1px solid var(--border);"><span style="color:var(--text-3);">Normal Hours</span><strong>8h/day (fixed)</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Project Link Setting -->
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-title-lg">🔗 Project Linking</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-surface);border-radius:var(--radius);border:1px solid var(--border);">
+          <div>
+            <div style="font-size:13px;font-weight:600;">Require project link when logging tasks</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:2px;">When enabled, employees must select a project from the dropdown before submitting a task log.</div>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="projectLinkMandatoryToggle" onchange="saveProjectLinkMandatory(this.checked)"
+              style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;" />
+            <span style="font-size:12px;color:var(--text-2);">Mandatory</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Kuwait Holidays -->
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-title-lg">🇰🇼 Kuwait Public Holidays 2026</div>
+        <p style="color:var(--text-3);font-size:12px;margin-bottom:12px;">⚠️ Approximate Islamic dates. Update <code>KUWAIT_HOLIDAYS_2026</code> in config.js if they differ.</p>
+        <div style="display:flex;flex-direction:column;gap:6px;" id="holidayList"></div>
+      </div>
+
+      <!-- Categories management — admin can add/rename/soft-delete primary categories
+           and manage subcategories under each. System categories (is_system=true)
+           cannot be renamed or hard-deleted; only soft-hidden. -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;">🏷️ Categories</div>
+        <button class="btn btn-primary btn-sm" onclick="openNewCategoryModal()">➕ New Primary Category</button>
+      </div>
+      <div id="categoriesList" style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">
+        <div class="loading"><div class="spinner"></div> Loading categories…</div>
+      </div>
+
+      <!-- New / Edit category modal -->
+      <div id="categoryModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center;padding:20px;">
+        <div class="card" style="max-width:420px;width:100%;">
+          <div class="card-title-lg" id="categoryModalTitle" style="margin-bottom:14px;">New Primary Category</div>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div>
+              <label class="form-label">Icon (emoji)</label>
+              <input type="text" id="categoryModalIcon" class="form-control" placeholder="🎯" maxlength="4" />
+            </div>
+            <div>
+              <label class="form-label">Name</label>
+              <input type="text" id="categoryModalName" class="form-control" placeholder="e.g. Training" />
+            </div>
+            <div>
+              <label class="form-label">Sort Order</label>
+              <input type="number" id="categoryModalSort" class="form-control" placeholder="0" />
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+            <button class="btn btn-secondary btn-sm" onclick="closeCategoryModal()">Cancel</button>
+            <button class="btn btn-primary btn-sm" id="categoryModalSaveBtn" onclick="saveCategoryModal()">💾 Save</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Employee Leave -->
+      <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">🏖️ Employee Leave</div>
+      <div class="card">
+        <p style="color:var(--text-2);font-size:13px;margin-bottom:16px;">Enter approved leave date ranges per employee. These specific dates are excluded from their individual working day count and expected hours.</p>
+        <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1.5fr auto;gap:12px;align-items:end;margin-bottom:16px;flex-wrap:wrap;">
+          <div>
+            <label class="form-label">Employee</label>
+            <select id="leaveUserSel" class="form-control"></select>
+          </div>
+          <div>
+            <label class="form-label">From</label>
+            <input type="date" id="leaveStart" class="form-control" />
+          </div>
+          <div>
+            <label class="form-label">To</label>
+            <input type="date" id="leaveEnd" class="form-control" />
+          </div>
+          <div>
+            <label class="form-label">Reason</label>
+            <input type="text" id="leaveReason" class="form-control" placeholder="Annual leave, sick…" />
+          </div>
+          <button class="btn btn-primary" onclick="addLeave()" style="margin-top:auto;">➕ Add</button>
+        </div>
+        <div id="leaveList" style="display:flex;flex-direction:column;gap:8px;">
+          <div class="loading"><div class="spinner"></div> Loading…</div>
+        </div>
+      </div><!-- end Employee Leave card -->
+
+      <!-- Email Configuration -->
+      <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;margin-top:24px;">📧 Email Notifications (EmailJS)</div>
+      <div class="card">
+        <p style="color:var(--text-2);font-size:13px;margin-bottom:6px;line-height:1.6;">
+          Configure <a href="https://emailjs.com" target="_blank" style="color:var(--accent-light);">EmailJS</a> to send email notifications when you assign tasks to employees.
+          Free plan supports 200 emails/month.
+        </p>
+        <p style="color:var(--text-3);font-size:12px;margin-bottom:16px;">
+          Setup: Create account → Add Email Service → Create Template with variables:
+          <code style="background:var(--bg-surface);padding:2px 6px;border-radius:4px;">{{to_email}} {{to_name}} {{from_name}} {{task_title}} {{task_priority}} {{task_due}} {{app_url}}</code>
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
+          <div>
+            <label class="form-label">Service ID</label>
+            <input type="text" id="emailjsServiceId" class="form-control" placeholder="service_xxxxxxx" />
+          </div>
+          <div>
+            <label class="form-label">Template ID</label>
+            <input type="text" id="emailjsTemplateId" class="form-control" placeholder="template_xxxxxxx" />
+          </div>
+          <div>
+            <label class="form-label">Public Key</label>
+            <input type="text" id="emailjsPublicKey" class="form-control" placeholder="Your public key" />
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="saveEmailjsConfig()">💾 Save Email Config</button>
+          <button class="btn btn-secondary btn-sm" onclick="testEmail()">📧 Send Test Email</button>
+          <div style="margin-top:4px;">
+            <label class="form-label" style="margin-bottom:4px;">Test recipient email</label>
+            <input type="email" id="testEmailAddr" class="form-control" placeholder="test@example.com" style="max-width:220px;" />
+          </div>
+        </div>
+        <div id="emailConfigStatus" style="margin-top:12px;font-size:12px;color:var(--text-3);"></div>
+      </div>
+
+      <!-- User Email Management -->
+      <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;margin-top:24px;">👥 User Email Addresses</div>
+      <div class="card">
+        <p style="color:var(--text-2);font-size:13px;margin-bottom:16px;">Set or update the email address for each team member.</p>
+        <div id="userEmailList" style="display:flex;flex-direction:column;gap:8px;">
+          <div class="loading"><div class="spinner"></div> Loading…</div>
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- TAB: BADGES -->
+    <div id="tab-badges" class="tab-content" style="display:none;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <h2 class="page-title" style="font-size:18px;margin:0;">🏅 Badges</h2>
+          <p class="page-subtitle" style="margin:4px 0 0;">Define earnable badges. Conditions are evaluated client-side on every page load that displays badges.</p>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openNewBadgeModal()">➕ New Badge</button>
+      </div>
+
+      <div id="badgesGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;">
+        <div class="loading"><div class="spinner"></div> Loading badges…</div>
+      </div>
+    </div>
+
+    <!-- New / Edit badge modal -->
+    <div id="badgeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center;padding:20px;">
+      <div class="card" style="max-width:520px;width:100%;max-height:90vh;overflow-y:auto;">
+        <div class="card-title-lg" id="badgeModalTitle" style="margin-bottom:14px;">New Badge</div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div style="display:grid;grid-template-columns:80px 1fr;gap:12px;">
+            <div>
+              <label class="form-label">Icon</label>
+              <select id="badgeModalIcon" class="form-control" style="font-size:18px;">
+                <optgroup label="Awards">
+                  <option value="🏅">🏅 Medal</option>
+                  <option value="🏆">🏆 Trophy</option>
+                  <option value="🥇">🥇 Gold Medal</option>
+                  <option value="🥈">🥈 Silver Medal</option>
+                  <option value="🥉">🥉 Bronze Medal</option>
+                  <option value="🎖️">🎖️ Military Medal</option>
+                  <option value="🎗️">🎗️ Ribbon</option>
+                </optgroup>
+                <optgroup label="Stars & Sparkle">
+                  <option value="⭐">⭐ Star</option>
+                  <option value="🌟">🌟 Glowing Star</option>
+                  <option value="✨">✨ Sparkles</option>
+                  <option value="💫">💫 Dizzy</option>
+                  <option value="💎">💎 Diamond</option>
+                  <option value="👑">👑 Crown</option>
+                </optgroup>
+                <optgroup label="Performance">
+                  <option value="🔥">🔥 Fire</option>
+                  <option value="💯">💯 Hundred</option>
+                  <option value="⚡">⚡ Lightning</option>
+                  <option value="💪">💪 Strong</option>
+                  <option value="🚀">🚀 Rocket</option>
+                  <option value="🎯">🎯 Target</option>
+                  <option value="📈">📈 Trending Up</option>
+                  <option value="🏃">🏃 Runner</option>
+                </optgroup>
+                <optgroup label="Skills & Roles">
+                  <option value="🛡️">🛡️ Shield (Support)</option>
+                  <option value="🧪">🧪 Lab (Testing)</option>
+                  <option value="🔧">🔧 Wrench</option>
+                  <option value="🔨">🔨 Hammer</option>
+                  <option value="⚙️">⚙️ Gear</option>
+                  <option value="🧠">🧠 Brain</option>
+                  <option value="🎨">🎨 Palette</option>
+                  <option value="🎓">🎓 Graduate</option>
+                </optgroup>
+                <optgroup label="Time & Status">
+                  <option value="✅">✅ Check</option>
+                  <option value="⏱️">⏱️ Stopwatch</option>
+                  <option value="📅">📅 Calendar</option>
+                  <option value="📊">📊 Chart</option>
+                  <option value="🗓️">🗓️ Spiral Calendar</option>
+                </optgroup>
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Name *</label>
+              <input type="text" id="badgeModalName" class="form-control" placeholder="e.g. Century Club" />
+            </div>
+          </div>
+          <div>
+            <label class="form-label">Description</label>
+            <input type="text" id="badgeModalDesc" class="form-control" placeholder="What earns this badge?" />
+          </div>
+          <div>
+            <label class="form-label">Condition Type *</label>
+            <select id="badgeModalConditionType" class="form-control" onchange="renderBadgeConditionInputs()">
+              <option value="total_hours">Total hours logged ≥ N</option>
+              <option value="consecutive_days">Consecutive working days logged ≥ N</option>
+              <option value="category_count">Tasks completed in a specific category ≥ N</option>
+              <option value="on_time_rate">On-time completion rate ≥ X% (min N closed tasks)</option>
+              <option value="custom">Custom (raw JSON — admin handles evaluator)</option>
+            </select>
+          </div>
+          <div id="badgeConditionInputs"></div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="badgeModalActive" checked style="width:16px;height:16px;cursor:pointer;" />
+            <label for="badgeModalActive" style="font-size:12px;color:var(--text-2);cursor:pointer;">Active (visible to users + auto-assigned)</label>
+          </div>
+          <div id="badgePreview" style="font-size:12px;color:var(--text-3);padding:10px;background:var(--bg-surface);border:1px dashed var(--border);border-radius:var(--radius);">Preview: how many users currently match this condition will appear here after Save.</div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+          <button class="btn btn-secondary btn-sm" onclick="closeBadgeModal()">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="badgeModalSaveBtn" onclick="saveBadgeModal()">💾 Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: PROJECT ANALYTICS -->
+    <div id="tab-project-analytics" class="tab-content" style="display:none;">
+      <div class="page-header" style="margin-bottom:20px;">
+        <div>
+          <h2 class="page-title" style="font-size:18px;">📊 Project Analytics</h2>
+          <p class="page-subtitle">Hours logged per project, employee involvement, and time breakdown.</p>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="loadProjectAnalytics()">🔄 Refresh</button>
+      </div>
+
+      <!-- Summary Cards -->
+      <div id="projAnalyticsSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:24px;"></div>
+
+      <!-- Hours by Project (horizontal bar) -->
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-title-lg">📁 Hours by Project</div>
+        <div style="font-size:11px;color:var(--text-3);margin-bottom:10px;">Click a bar to see all logs for that project.</div>
+        <div id="projByProjectChartWrap" style="position:relative;min-height:240px;">
+          <div class="loading"><div class="spinner"></div> Loading…</div>
+        </div>
+      </div>
+
+      <!-- Employee Involvement by Project (stacked bar) -->
+      <div class="card">
+        <div class="card-title-lg">👤 Employee Involvement by Project</div>
+        <div style="font-size:11px;color:var(--text-3);margin-bottom:10px;">Each project's bar is split by employee. Click a segment to see that employee's logs on that project.</div>
+        <div id="projByEmployeeChartWrap" style="position:relative;min-height:280px;">
+          <div class="loading"><div class="spinner"></div> Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: EXPORT -->
+    <div id="tab-export" class="tab-content" style="display:none;">
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-title-lg">🔽 Filter Before Exporting</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-bottom:20px;">
+          <div class="form-group mb-0">
+            <label class="form-label">Employee</label>
+            <select class="form-control" id="exportUserSel"><option value="">All Members</option></select>
+          </div>
+          <div class="form-group mb-0">
+            <label class="form-label">Category</label>
+            <select class="form-control" id="exportCatSel" onchange="onExportCatChange()">
+              <option value="">All Categories</option>
+            </select>
+          </div>
+          <div class="form-group mb-0">
+            <label class="form-label">Sub-Category</label>
+            <select class="form-control" id="exportSubcatSel"><option value="">All Sub-Categories</option></select>
+          </div>
+          <div class="form-group mb-0">
+            <label class="form-label">Month</label>
+            <select class="form-control" id="exportMonthSel"><option value="">All Months</option></select>
+          </div>
+          <div class="form-group mb-0">
+            <label class="form-label">From Date</label>
+            <input type="date" class="form-control" id="exportDateFrom" />
+          </div>
+          <div class="form-group mb-0">
+            <label class="form-label">To Date</label>
+            <input type="date" class="form-control" id="exportDateTo" />
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="exportFiltered()">⬇️ Download Filtered CSV</button>
+          <button class="btn btn-secondary btn-sm" onclick="clearExportFilters()">Clear Filters</button>
+          <span id="exportPreviewCount" style="font-size:12px;color:var(--text-3);"></span>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="card">
+          <div class="card-title-lg">📤 Quick Export</div>
+          <p style="color:var(--text-2);font-size:13px;margin-bottom:16px;">Download all logs without any filters applied.</p>
+          <button class="btn btn-secondary" onclick="exportAllCSV()" style="width:100%;justify-content:center;">⬇️ All Logs CSV</button>
+        </div>
+        <div id="exportPreviewCard" class="card" style="display:none;">
+          <div class="card-title-lg">👁️ Preview</div>
+          <div id="exportPreviewTable"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Delete User Modal -->
+<div class="modal-backdrop" id="deleteUserModal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <h2 class="modal-title">🗑️ Delete User</h2>
+      <button class="modal-close" onclick="closeDeleteUserModal()">✕</button>
+    </div>
+    <p style="color:var(--text-2);margin-bottom:8px;">
+      Are you sure you want to permanently delete <strong id="deleteUserName" style="color:var(--text-1)"></strong>?
+    </p>
+    <p id="deleteUserLogCount" style="color:var(--warning);font-size:13px;margin-bottom:24px;"></p>
+    <p style="color:var(--text-3);font-size:12px;margin-bottom:24px;">This action cannot be undone.</p>
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeDeleteUserModal()">Cancel</button>
+      <button class="btn btn-danger" id="confirmDeleteUserBtn" onclick="confirmDeleteUser()">🗑️ Delete User</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal-backdrop" id="resetPassModal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <h2 class="modal-title">🔑 Reset Password</h2>
+      <button class="modal-close" onclick="closeResetPassModal()">✕</button>
+    </div>
+    <p style="color:var(--text-2);margin-bottom:20px;">Set a new password for <strong id="resetPassName" style="color:var(--text-1)"></strong>.</p>
+    <div class="form-group">
+      <label class="form-label">New Password <span class="req">*</span></label>
+      <input type="password" id="resetPassInput" class="form-control" placeholder="Min. 6 characters" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Confirm Password <span class="req">*</span></label>
+      <input type="password" id="resetPassConfirm" class="form-control" placeholder="Repeat new password" />
+    </div>
+    <div class="login-error" id="resetPassError" style="margin-bottom:12px;"></div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeResetPassModal()">Cancel</button>
+      <button class="btn btn-primary" id="resetPassBtn" onclick="saveResetPassword()">🔑 Save Password</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit User Modal (Admin) -->
+<div class="modal-backdrop" id="editUserModal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <h2 class="modal-title">✏️ Edit User</h2>
+      <button class="modal-close" onclick="closeEditUserModal()">✕</button>
+    </div>
+
+    <!-- Avatar — click to upload to team-photos bucket -->
+    <div class="form-group" style="display:flex;align-items:center;gap:14px;">
+      <div id="editUserAvatar" class="user-avatar" style="width:64px;height:64px;font-size:18px;border:1px solid var(--border);overflow:hidden;cursor:pointer;flex-shrink:0;" onclick="document.getElementById('editUserAvatarFile').click()" title="Click to upload"></div>
+      <input type="file" id="editUserAvatarFile" accept="image/*" style="display:none;" />
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;font-weight:600;color:var(--text-2);">Profile picture</div>
+        <div class="form-hint">Click the avatar to upload. Images go to the <code>team-photos</code> bucket.</div>
+        <div id="editUserAvatarStatus" style="font-size:11px;color:var(--text-3);margin-top:4px;"></div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Full Name <span class="req">*</span></label>
+      <input type="text" id="editUserFullName" class="form-control" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Username</label>
+      <input type="text" id="editUserUsername" class="form-control" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Email</label>
+      <input type="email" id="editUserEmail" class="form-control" readonly style="opacity:.65;cursor:not-allowed;" />
+      <div class="form-hint">Login email — change requires admin via Supabase Auth (not editable here).</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Job Title</label>
+      <input type="text" id="editUserJobTitle" class="form-control" placeholder="e.g. Senior Engineer" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Bio</label>
+      <textarea id="editUserBio" class="form-control" rows="2" placeholder="Short bio shown on the landing page team section"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Application Permission</label>
+      <select id="editUserRole" class="form-control">
+        <option value="user">User — log tasks, view projects</option>
+        <option value="admin">Admin — full access to everything</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Employee Role(s)</label>
+      <div class="chip-input" id="editEmployeeRolesChips">
+        <input type="text" id="editEmployeeRolesInput" data-chip-state="editEmployeeRoles" placeholder="Type a role and press Enter…" autocomplete="off" />
+      </div>
+    </div>
+
+    <div class="login-error" id="editUserError" style="margin-bottom:12px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeEditUserModal()">Cancel</button>
+      <button class="btn btn-primary" id="editUserSaveBtn" onclick="saveUserProfile()">💾 Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- View-only Log Details Modal (Admin) -->
+<div class="modal-backdrop" id="logViewModal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <h2 class="modal-title">📋 Log Details</h2>
+      <button class="modal-close" onclick="closeLogViewModal()">✕</button>
+    </div>
+    <div id="logViewBody" style="display:flex;flex-direction:column;gap:14px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button class="btn btn-secondary" onclick="closeLogViewModal()">Close</button>
+      <button class="btn btn-primary" id="logViewEditBtn">✏️ Edit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Record Modal (Admin) -->
+<div class="modal-backdrop" id="adminEditModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">✏️ Edit Task Log</h2>
+      <button class="modal-close" onclick="closeAdminEdit()">✕</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Date</label>
+        <input type="date" id="aeDate" class="form-control" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Team Member</label>
+        <input type="text" id="aeMember" class="form-control" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Task / Project</label>
+      <input type="text" id="aeTask" class="form-control" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <textarea id="aeDesc" class="form-control" rows="2"></textarea>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <select id="aeCategory" class="form-control">
+          <option value="Support">Support</option>
+          <option value="Testing">Testing</option>
+          <option value="Project">Project</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hours</label>
+        <input type="number" id="aeHours" class="form-control" min="0.25" max="24" step="0.25" />
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Sub-Category</label>
+        <input type="text" id="aeSubCat" class="form-control" placeholder="e.g. Hardware Testing" />
+      </div>
+      <div class="form-group" style="display:flex;align-items:center;padding-top:26px;">
+        <label class="completed-check">
+          <input type="checkbox" id="aeIsCompleted" />
+          <span>Mark as <strong>Completed</strong></span>
+        </label>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Accomplishment</label>
+      <input type="text" id="aeAccomp" class="form-control" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes</label>
+      <textarea id="aeNotes" class="form-control" rows="2"></textarea>
+    </div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeAdminEdit()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveAdminEdit()">💾 Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Project Analytics Drill-Down Modal ── -->
+<div class="modal-backdrop" id="projDrillModal" onclick="if(event.target===this)closeProjAnalyticsDrill()">
+  <div class="modal" style="max-width:880px;">
+    <div class="modal-header">
+      <div>
+        <h2 class="modal-title" id="projDrillTitle">—</h2>
+        <div id="projDrillSubtitle" style="font-size:12px;color:var(--text-3);margin-top:4px;">—</div>
+      </div>
+      <button class="modal-close" onclick="closeProjAnalyticsDrill()">✕</button>
+    </div>
+    <div class="table-wrapper" id="projDrillBody" style="max-height:60vh;overflow:auto;">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+      <button class="btn btn-secondary" onclick="closeProjAnalyticsDrill()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/utils.js"></script>
+<script>
+const session = requireAdmin();
+let allUsers = [], allLogs = [], selectedUserId = null, adminEditId = null, appStartDate = null;
+
+async function init() {
+  initTheme(); injectThemeToggle();
+  renderSidebar('admin');
+  loadSidebarStats(session.id);
+  document.getElementById('menuToggle').addEventListener('click', () => {
+    document.getElementById('app-sidebar').classList.toggle('open');
+    document.getElementById('sidebarOverlay').classList.toggle('open');
+  });
+  const [, , sdRes] = await Promise.all([loadUsers(), loadAllLogs(),
+    db.from('app_settings').select('value').eq('key','tracker_start_date').maybeSingle()
+  ]);
+  appStartDate = sdRes?.data?.value || null;
+  renderUserList();
+  populateFilters();
+  renderRecordsTable();
+  renderComparison();
+  setupExportSelects();
+  refreshApprovalsCountBadge();
+  // Bind the Create User form's Employee Roles chip input now so admin
+  // can type roles + press Enter without first clicking Create User.
+  // (chipBindInput is idempotent via dataset.bound — safe to call.)
+  chipBindInput('newEmployeeRoles', 'newEmployeeRolesChips', 'newEmployeeRolesInput');
+}
+
+async function loadUsers() {
+  const { data } = await db.from('profiles').select('id, username, full_name, role, email, avatar_url, job_title, bio, employee_roles, created_at').order('full_name');
+  allUsers = data || [];
+  // If the Analysis tab's button strip exists, refresh it so newly-created
+  // employees show up immediately and deleted ones disappear.
+  if (document.getElementById('analysisUserButtons')) initAnalysisTab();
+}
+
+async function loadAllLogs() {
+  // Disambiguate the profiles join — task_logs has two FKs to profiles
+  // (user_id and approved_by from the 2026-04-25 migration). Using the
+  // column-name hint picks the user_id relationship.
+  // Scoped column list (was select('*')) to cut wire payload ~40-60% per
+  // call — these are the fields actually consumed by Records, Comparison,
+  // Employee Analysis, Approvals drill-downs, and Project Analytics.
+  const { data, error } = await db.from('task_logs')
+    .select('id, user_id, team_member, log_date, month, week_number, task_project, task_description, hours_spent, category, sub_category, accomplishment, accomplishment_status, rejection_reason, comments_notes, is_completed, linked_project_id, priority_task_id, profiles!user_id(full_name)')
+    .order('log_date', { ascending: false });
+  if (error) console.error('loadAllLogs error:', error);
+  allLogs = data || [];
+}
+
+// ── Tab switching ──────────────────────────────────────────
+const TAB_ORDER = ['users','records','approvals','comparison','analysis','export','settings','badges','project-analytics'];
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+  document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`tab-${name}`).style.display = 'block';
+  const idx = TAB_ORDER.indexOf(name);
+  if (idx >= 0) document.querySelectorAll('.admin-tab')[idx].classList.add('active');
+  if (name === 'settings')          loadSettingsTab();
+  if (name === 'project-analytics') loadProjectAnalytics();
+  if (name === 'comparison') {
+    // Skip the refetch — the data was loaded on admin init (and is
+    // refreshed after every CRUD op via the existing loadAllLogs() calls
+    // in handleAdmin*/approval/category handlers). Use the in-memory
+    // copy. If the user wants the absolute latest, the 🔄 Refresh button
+    // in the Comparison filter bar still calls loadAllLogs explicitly.
+    renderComparison();
+  }
+  if (name === 'analysis')   initAnalysisTab();
+  if (name === 'export')     initExportTab();
+  if (name === 'badges')     loadBadgesTab();
+  if (name === 'approvals')  loadApprovalsTab();
+}
+
+// ── Settings Tab ───────────────────────────────────────────
+async function loadSettingsTab() {
+  loadWarRangeList();
+  const listEl = document.getElementById('holidayList');
+  if (listEl) {
+    listEl.innerHTML = KUWAIT_HOLIDAYS_2026.map(d => {
+      const dow = new Date(d).toLocaleDateString('en-GB', { weekday: 'long' });
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg-surface);border-radius:var(--radius);border:1px solid var(--border);">
+        <span style="font-size:13px;font-weight:600;">📅 ${KUWAIT_HOLIDAY_LABELS[d]||'Holiday'}</span>
+        <span style="font-size:12px;color:var(--text-3);">${dow}, ${formatDate(d)}</span>
+      </div>`;
+    }).join('');
+  }
+  renderCategoriesAdmin();
+  populateLeaveUserSelect();
+  loadLeaveList();
+  loadEmailjsConfig();
+  loadUserEmailList();
+
+  // Load tracker start date
+  const startRes = await db.from('app_settings').select('value').eq('key','tracker_start_date').maybeSingle();
+  if (startRes.data) document.getElementById('trackerStartInput').value = startRes.data.value;
+
+  // Load project_link_mandatory setting
+  const mandRes = await db.from('app_settings').select('value').eq('key','project_link_mandatory').maybeSingle();
+  const mandEl  = document.getElementById('projectLinkMandatoryToggle');
+  if (mandEl) mandEl.checked = mandRes?.data?.value === 'true';
+}
+
+async function addWarRange() {
+  const start = document.getElementById('warRangeStart').value;
+  const end   = document.getElementById('warRangeEnd').value || start;
+  const label = document.getElementById('warRangeLabel').value.trim() || 'War / Conflict';
+  if (!start) { showToast('Select a start date', 'warning'); return; }
+  if (end < start) { showToast('End date must be after start date', 'warning'); return; }
+  const { error } = await db.from('war_day_ranges').insert({ start_date: start, end_date: end, label });
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else {
+    showToast('War date range added ✅', 'success');
+    document.getElementById('warRangeStart').value = '';
+    document.getElementById('warRangeEnd').value   = '';
+    document.getElementById('warRangeLabel').value = '';
+    loadWarRangeList();
+  }
+}
+
+async function loadWarRangeList() {
+  const el = document.getElementById('warRangeList');
+  if (!el) return;
+  const { data, error } = await db.from('war_day_ranges').select('*').order('start_date');
+  if (error) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--danger);">⚠️ Run add_v8_migration.sql in Supabase to enable this feature.</div>';
+    return;
+  }
+  if (!data || !data.length) {
+    el.innerHTML = '<div style="font-size:13px;color:var(--text-3);padding:8px;">No war day ranges added yet.</div>';
+    return;
+  }
+  el.innerHTML = data.map(r => {
+    const same = r.start_date === r.end_date;
+    const dateStr = same ? formatDate(r.start_date) : `${formatDate(r.start_date)} → ${formatDate(r.end_date)}`;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg-surface);border-radius:var(--radius);border:1px solid var(--border);border-left:4px solid var(--danger);">
+      <div>
+        <div style="font-size:13px;font-weight:700;">⚠️ ${r.label}</div>
+        <div style="font-size:12px;color:var(--text-3);margin-top:2px;">📅 ${dateStr}</div>
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="deleteWarRange('${r.id}')">🗑️ Remove</button>
+    </div>`;
+  }).join('');
+}
+
+async function deleteWarRange(id) {
+  if (!confirm('Remove this war date range?')) return;
+  const { error } = await db.from('war_day_ranges').delete().eq('id', id);
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else { showToast('War range removed', 'success'); loadWarRangeList(); }
+}
+
+async function saveTrackerStart() {
+  const val = document.getElementById('trackerStartInput').value;
+  if (!val) { showToast('Pick a date first','warning'); return; }
+  const { error } = await db.from('app_settings').upsert({ key:'tracker_start_date', value:val, label:'Tracker Start Date', updated_by: session.id }, { onConflict:'key' });
+  if (error) showToast('Failed: '+error.message,'error');
+  else showToast('Tracker start date saved! Reload pages to see updated counts.','success');
+}
+
+// ── Admin-managed Categories + Subcategories ───────────────
+// Reads from the new `categories` / `subcategories` tables (Phase 4
+// migration). Falls back to legacy 3-table layout via loadCategories()
+// if the migration hasn't been applied yet — that path renders the rows
+// read-only with a hint.
+let categoryEditId = null;
+
+async function renderCategoriesAdmin() {
+  const el = document.getElementById('categoriesList');
+  if (!el) return;
+  el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading…</div>';
+
+  // Pull ALL categories (active + inactive) so admin can restore soft-deleted ones.
+  // loadCategories() only returns active rows, so go direct here.
+  let cats = [], subs = [];
+  let migrated = true;
+  try {
+    const [catRes, subRes] = await Promise.all([
+      db.from('categories').select('*').order('sort_order').order('name'),
+      db.from('subcategories').select('*').order('sort_order').order('name'),
+    ]);
+    if (catRes.error) throw catRes.error;
+    cats = catRes.data || [];
+    subs = subRes.data || [];
+  } catch (e) {
+    migrated = false;
+  }
+
+  if (!migrated) {
+    el.innerHTML = '<div style="padding:14px;background:var(--bg-surface);border:1px dashed var(--border);border-radius:var(--radius-lg);font-size:12px;color:var(--text-3);">📦 Run the <code>2026-04-24_categories-badges-doneat.sql</code> migration in Supabase to enable admin-managed categories. Until then, sub-categories can only be edited via the legacy three-table layout.</div>';
+    return;
+  }
+
+  if (!cats.length) {
+    el.innerHTML = '<div style="padding:14px;font-size:12px;color:var(--text-3);">No categories yet. Click "+ New Primary Category" above.</div>';
+    return;
+  }
+
+  el.innerHTML = cats.map(c => {
+    const mySubs = subs.filter(s => s.category_id === c.id);
+    const dim = !c.is_active ? 'opacity:.45;' : '';
+    return `
+    <div class="card" style="${dim}">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+        <span style="font-size:22px;">${c.icon || '📁'}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:800;font-size:15px;">${c.name}${c.is_system ? ' <span style="font-size:10px;color:var(--text-3);font-weight:600;background:var(--bg-surface);padding:2px 6px;border-radius:4px;margin-left:4px;">SYSTEM</span>' : ''}${!c.is_active ? ' <span style="font-size:10px;color:var(--warning);font-weight:600;margin-left:4px;">HIDDEN</span>' : ''}</div>
+          <div style="font-size:11px;color:var(--text-3);">${mySubs.length} sub-categor${mySubs.length === 1 ? 'y' : 'ies'} · sort ${c.sort_order || 0}</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-secondary btn-sm" onclick="openEditCategoryModal('${c.id}')" ${c.is_system ? 'title="System category — name can be edited but row stays"' : ''}>✏️</button>
+          <button class="btn btn-secondary btn-sm" onclick="toggleCategoryActive('${c.id}', ${c.is_active})" title="${c.is_active ? 'Hide from pickers' : 'Restore to pickers'}">${c.is_active ? '👁️‍🗨️ Hide' : '👁️ Show'}</button>
+          ${!c.is_system ? `<button class="btn btn-danger btn-sm" onclick="deleteCategory('${c.id}', '${c.name.replace(/'/g,"\\'")}')">🗑️</button>` : ''}
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <input type="text" id="newSub-${c.id}" class="form-control" placeholder="New sub-category…" />
+        <button class="btn btn-primary btn-sm" onclick="addSubcatToCategory('${c.id}')">➕</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${mySubs.length
+          ? mySubs.map(s => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg-surface);border-radius:var(--radius-sm);border:1px solid var(--border);${!s.is_active ? 'opacity:.5;' : ''}">
+              <span style="font-size:13px;font-weight:600;">${s.name}${!s.is_active ? ' <span style="font-size:10px;color:var(--warning);">HIDDEN</span>' : ''}</span>
+              <div style="display:flex;gap:6px;">
+                <button class="btn btn-secondary btn-sm" onclick="toggleSubcatActive('${s.id}', ${s.is_active})">${s.is_active ? 'Hide' : 'Show'}</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteSubcategory('${s.id}', '${s.name.replace(/'/g,"\\'")}')">🗑️</button>
+              </div>
+            </div>`).join('')
+          : '<div style="font-size:12px;color:var(--text-3);">No sub-categories yet.</div>'}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openNewCategoryModal() {
+  categoryEditId = null;
+  document.getElementById('categoryModalTitle').textContent = 'New Primary Category';
+  document.getElementById('categoryModalIcon').value = '';
+  document.getElementById('categoryModalName').value = '';
+  document.getElementById('categoryModalSort').value = '';
+  document.getElementById('categoryModal').style.display = 'flex';
+}
+
+async function openEditCategoryModal(id) {
+  const { data } = await db.from('categories').select('*').eq('id', id).single();
+  if (!data) { showToast('Category not found', 'error'); return; }
+  categoryEditId = id;
+  document.getElementById('categoryModalTitle').textContent = 'Edit Category';
+  document.getElementById('categoryModalIcon').value = data.icon || '';
+  document.getElementById('categoryModalName').value = data.name || '';
+  document.getElementById('categoryModalSort').value = data.sort_order ?? 0;
+  document.getElementById('categoryModal').style.display = 'flex';
+}
+
+function closeCategoryModal() {
+  document.getElementById('categoryModal').style.display = 'none';
+  categoryEditId = null;
+}
+
+async function saveCategoryModal() {
+  const name = document.getElementById('categoryModalName').value.trim();
+  const icon = document.getElementById('categoryModalIcon').value.trim();
+  const sort = parseInt(document.getElementById('categoryModalSort').value) || 0;
+  if (!name) { showToast('Name is required', 'warning'); return; }
+  const payload = { name, icon: icon || null, sort_order: sort };
+  let res;
+  if (categoryEditId) {
+    res = await db.from('categories').update(payload).eq('id', categoryEditId);
+  } else {
+    res = await db.from('categories').insert(payload);
+  }
+  if (res.error) { showToast(res.error.code === '23505' ? 'Name already exists' : res.error.message, 'error'); return; }
+  showToast(`"${name}" saved`, 'success');
+  closeCategoryModal();
+  renderCategoriesAdmin();
+  populateFilters();          // refresh Records + Export category dropdowns
+  setupExportSelects();       // refresh exportSubcats cache for the Sub-Cat filter
+}
+
+async function toggleCategoryActive(id, currentlyActive) {
+  const { error } = await db.from('categories').update({ is_active: !currentlyActive }).eq('id', id);
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else {
+    showToast(currentlyActive ? 'Hidden' : 'Restored', 'success');
+    renderCategoriesAdmin();
+    populateFilters();
+    setupExportSelects();
+  }
+}
+
+async function deleteCategory(id, name) {
+  if (!confirm(`Delete "${name}" and all its sub-categories? This cannot be undone — task logs already in this category will keep the name string.`)) return;
+  const { error } = await db.from('categories').delete().eq('id', id);
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else {
+    showToast(`"${name}" deleted`, 'success');
+    renderCategoriesAdmin();
+    populateFilters();
+    setupExportSelects();
+  }
+}
+
+async function addSubcatToCategory(categoryId) {
+  const input = document.getElementById('newSub-' + categoryId);
+  const name = input?.value.trim();
+  if (!name) { showToast('Enter a name', 'warning'); return; }
+  const { error } = await db.from('subcategories').insert({ category_id: categoryId, name });
+  if (error) showToast(error.code === '23505' ? 'Already exists in this category' : error.message, 'error');
+  else { showToast(`"${name}" added`, 'success'); input.value = ''; renderCategoriesAdmin(); setupExportSelects(); }
+}
+
+async function toggleSubcatActive(id, currentlyActive) {
+  const { error } = await db.from('subcategories').update({ is_active: !currentlyActive }).eq('id', id);
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else { renderCategoriesAdmin(); setupExportSelects(); }
+}
+
+async function deleteSubcategory(id, name) {
+  if (!confirm(`Delete sub-category "${name}"?`)) return;
+  const { error } = await db.from('subcategories').delete().eq('id', id);
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else { showToast(`"${name}" deleted`, 'success'); renderCategoriesAdmin(); setupExportSelects(); }
+}
+
+// ── Employee Leave Management ───────────────────────────────
+async function populateLeaveUserSelect() {
+  const sel = document.getElementById('leaveUserSel');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Select employee…</option>';
+  allUsers.forEach(u => sel.appendChild(new Option(u.full_name, u.id)));
+}
+
+async function loadLeaveList() {
+  const el = document.getElementById('leaveList');
+  if (!el) return;
+  const { data } = await db.from('employee_leaves').select('*, profiles(full_name)').order('start_date', { ascending: false });
+  if (!data || !data.length) { el.innerHTML = `<div style="font-size:13px;color:var(--text-3);">No leave entries yet.</div>`; return; }
+  // Group by user
+  const byUser = {};
+  data.forEach(l => {
+    const n = l.profiles?.full_name || l.user_id;
+    if (!byUser[n]) byUser[n] = [];
+    byUser[n].push(l);
+  });
+  el.innerHTML = Object.entries(byUser).map(([name, leaves]) => `
+    <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px;">👤 ${name}</div>
+      ${leaves.map(lv => `
+        <div style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">
+          <span>📅 ${formatDate(lv.start_date)} → ${formatDate(lv.end_date)}</span>
+          ${lv.reason ? `<span style="color:var(--text-3);">${lv.reason}</span>` : ''}
+          <button class="btn btn-danger btn-sm" style="margin-left:auto;" onclick="deleteLeave('${lv.id}')">🗑️</button>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+async function addLeave() {
+  const uid    = document.getElementById('leaveUserSel').value;
+  const start  = document.getElementById('leaveStart').value;
+  const end    = document.getElementById('leaveEnd').value;
+  const reason = document.getElementById('leaveReason').value.trim();
+  if (!uid || !start || !end) { showToast('Select employee and both dates', 'warning'); return; }
+  if (end < start)             { showToast('End date must be after start date', 'warning'); return; }
+  const { error } = await db.from('employee_leaves').insert({ user_id: uid, start_date: start, end_date: end, reason });
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else {
+    showToast('Leave added!', 'success');
+    document.getElementById('leaveUserSel').value = '';
+    document.getElementById('leaveStart').value   = '';
+    document.getElementById('leaveEnd').value     = '';
+    document.getElementById('leaveReason').value  = '';
+    invalidateWorkingTimeCaches();
+    loadLeaveList();
+  }
+}
+
+async function deleteLeave(id) {
+  if (!confirm('Remove this leave entry?')) return;
+  const { error } = await db.from('employee_leaves').delete().eq('id', id);
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else { showToast('Leave removed', 'success'); invalidateWorkingTimeCaches(); loadLeaveList(); }
+}
+
+async function saveWarDays() {
+  const btn = document.getElementById('saveWarDaysBtn');
+  const val = parseInt(document.getElementById('warDaysInput').value) || 0;
+  if (val < 0) { showToast('War days cannot be negative', 'warning'); return; }
+
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const { error } = await db
+    .from('app_settings')
+    .upsert({ key: 'war_days_off', value: String(val), label: 'War Days Off (global team deduction)', updated_by: session.id }, { onConflict: 'key' });
+
+  if (error) {
+    showToast('Failed to save: ' + error.message, 'error');
+  } else {
+    showToast(`War days set to ${val} — all team performance pages updated ✅`, 'success');
+    loadSettingsTab();
+  }
+  btn.disabled = false; btn.textContent = '💾 Save Setting';
+}
+
+// ── Chip input (shared by Create User + Edit User) ─────────
+// Module-scope arrays keep state independent across the two forms.
+const _chipState = { newEmployeeRoles: [], editEmployeeRoles: [] };
+
+function chipRender(stateKey, hostId, inputId) {
+  const host  = document.getElementById(hostId);
+  const input = document.getElementById(inputId);
+  if (!host || !input) return;
+  // Wipe everything except the trailing input
+  Array.from(host.querySelectorAll('.chip')).forEach(c => c.remove());
+  _chipState[stateKey].forEach((val, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.innerHTML = `${val.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}<span class="x" data-i="${i}" title="Remove">×</span>`;
+    chip.querySelector('.x').addEventListener('click', () => {
+      _chipState[stateKey].splice(i, 1);
+      chipRender(stateKey, hostId, inputId);
+    });
+    host.insertBefore(chip, input);
+  });
+}
+
+// Single document-level delegation listener — one bind, works for
+// every chip input (including ones that mount later like the edit
+// modal). Beats per-input binding because there's no init timing
+// to get wrong. Inputs declare themselves via data-chip-state.
+(function bootstrapChipDelegation() {
+  if (window._chipDelegationBound) return;
+  window._chipDelegationBound = true;
+
+  document.addEventListener('keydown', (e) => {
+    const input = e.target;
+    if (!input || !input.matches || !input.matches('.chip-input input[type="text"]')) return;
+    const host = input.parentElement;
+    const stateKey = input.dataset.chipState;
+    if (!stateKey || !_chipState[stateKey]) return;
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      const v = input.value.trim().replace(/,$/, '');
+      if (!v) return;
+      if (!_chipState[stateKey].includes(v)) _chipState[stateKey].push(v);
+      input.value = '';
+      chipRender(stateKey, host.id, input.id);
+    } else if (e.key === 'Backspace' && !input.value && _chipState[stateKey].length) {
+      _chipState[stateKey].pop();
+      chipRender(stateKey, host.id, input.id);
+    }
+  });
+
+  // Click anywhere on a chip-input wrapper focuses its inner input.
+  document.addEventListener('click', (e) => {
+    const host = e.target.closest && e.target.closest('.chip-input');
+    if (!host || e.target.tagName === 'INPUT' || e.target.classList.contains('x')) return;
+    const input = host.querySelector('input[type="text"]');
+    if (input) input.focus();
+  });
+})();
+
+// Legacy no-op shim — kept so any old call sites don't error.
+// Real wiring lives in the delegation block above.
+function chipBindInput(stateKey, hostId, inputId) { /* no-op: delegation handles it */ }
+
+function chipReset(stateKey, hostId, inputId, initial = []) {
+  _chipState[stateKey] = Array.isArray(initial) ? [...initial] : [];
+  const input = document.getElementById(inputId);
+  if (input) input.value = '';
+  chipRender(stateKey, hostId, inputId);
+}
+
+// ── User Management ────────────────────────────────────────
+async function createUser() {
+  const btn = document.getElementById('createUserBtn');
+  const err = document.getElementById('createError');
+  err.classList.remove('show');
+
+  // Bind once; safe to call repeatedly
+  chipBindInput('newEmployeeRoles', 'newEmployeeRolesChips', 'newEmployeeRolesInput');
+
+  const fullName = document.getElementById('newFullName').value.trim();
+  const email    = document.getElementById('newEmail').value.trim().toLowerCase();
+  const password = document.getElementById('newPassword').value;
+  const role     = document.getElementById('newRole').value;
+  // Capture any role still in the input that hasn't been chip-confirmed
+  const trailingRole = document.getElementById('newEmployeeRolesInput').value.trim();
+  if (trailingRole && !_chipState.newEmployeeRoles.includes(trailingRole)) _chipState.newEmployeeRoles.push(trailingRole);
+  const employeeRoles = [..._chipState.newEmployeeRoles];
+
+  if (!fullName || !email || !password) { err.textContent = 'Full name, email and password are required'; err.classList.add('show'); return; }
+  if (password.length < 6) { err.textContent = 'Password must be at least 6 characters'; err.classList.add('show'); return; }
+
+  btn.disabled = true; btn.textContent = 'Creating…';
+
+  // Create Supabase Auth user
+  const { data: authData, error: authErr } = await db.auth.signUp({
+    email, password,
+    options: { data: { full_name: fullName, role } }
+  });
+
+  if (authErr) {
+    err.textContent = authErr.message;
+    err.classList.add('show');
+    btn.disabled = false; btn.textContent = '⚔️ Create User';
+    return;
+  }
+
+  // Upsert profile (trigger may have already created it)
+  if (authData?.user?.id) {
+    await db.from('profiles').upsert({
+      id: authData.user.id,
+      full_name: fullName,
+      email,
+      role,
+      username: email.split('@')[0],
+      employee_roles: employeeRoles,
+    });
+  }
+
+  showToast(`User "${fullName}" created! They can now log in with their email.`, 'success');
+  document.getElementById('newFullName').value = '';
+  document.getElementById('newEmail').value    = '';
+  document.getElementById('newPassword').value = '';
+  chipReset('newEmployeeRoles', 'newEmployeeRolesChips', 'newEmployeeRolesInput', []);
+  await loadUsers();
+  renderUserList();
+  populateFilters();
+  setupExportSelects();
+  btn.disabled = false; btn.textContent = '⚔️ Create User';
+}
+
+// ── Edit User Modal ────────────────────────────────────────
+let _editingUserId = null;
+// Stages a freshly-uploaded avatar URL between the file-pick step and
+// the Save click. If the user uploads but cancels, we just throw it
+// away — the file stays in the bucket but the profile isn't updated.
+let _stagedAvatarUrl = null;
+
+function openEditUserModal(uid) {
+  const u = allUsers.find(x => x.id === uid);
+  if (!u) { showToast('User not found', 'error'); return; }
+  _editingUserId = uid;
+  _stagedAvatarUrl = null;
+
+  // Bind chip + file pickers once
+  chipBindInput('editEmployeeRoles', 'editEmployeeRolesChips', 'editEmployeeRolesInput');
+  const fileInput = document.getElementById('editUserAvatarFile');
+  if (fileInput && !fileInput.dataset.bound) {
+    fileInput.dataset.bound = '1';
+    fileInput.addEventListener('change', handleEditUserAvatarChange);
+  }
+
+  // Prefill
+  const ini = u.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  const av  = document.getElementById('editUserAvatar');
+  av.innerHTML = u.avatar_url
+    ? `<img src="${u.avatar_url}" alt="" onerror="this.outerHTML='${ini}'" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />`
+    : ini;
+  document.getElementById('editUserFullName').value  = u.full_name || '';
+  document.getElementById('editUserUsername').value  = u.username || '';
+  document.getElementById('editUserEmail').value     = u.email || '';
+  document.getElementById('editUserJobTitle').value  = u.job_title || '';
+  document.getElementById('editUserBio').value       = u.bio || '';
+  document.getElementById('editUserRole').value      = u.role || 'user';
+  chipReset('editEmployeeRoles', 'editEmployeeRolesChips', 'editEmployeeRolesInput', u.employee_roles || []);
+  document.getElementById('editUserError').classList.remove('show');
+  document.getElementById('editUserAvatarStatus').textContent = '';
+  document.getElementById('editUserModal').classList.add('open');
+}
+
+function closeEditUserModal() {
+  document.getElementById('editUserModal').classList.remove('open');
+  _editingUserId = null;
+  _stagedAvatarUrl = null;
+}
+
+async function handleEditUserAvatarChange(e) {
+  const file = e.target.files?.[0];
+  if (!file || !_editingUserId) return;
+  const status = document.getElementById('editUserAvatarStatus');
+  const av = document.getElementById('editUserAvatar');
+  status.textContent = 'Uploading…';
+  try {
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+    const path = `${_editingUserId}/${Date.now()}.${ext}`;
+    const { error: upErr } = await db.storage.from('team-photos').upload(path, file, { cacheControl: '3600', upsert: true });
+    if (upErr) throw upErr;
+    const { data: { publicUrl } } = db.storage.from('team-photos').getPublicUrl(path);
+    _stagedAvatarUrl = publicUrl;
+    av.innerHTML = `<img src="${publicUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />`;
+    status.textContent = 'Uploaded — click Save to apply.';
+    status.style.color = 'var(--success)';
+  } catch (err) {
+    console.error('Avatar upload failed:', err);
+    status.textContent = 'Upload failed: ' + (err.message || err);
+    status.style.color = 'var(--p-urgent)';
+  } finally {
+    e.target.value = ''; // reset so the same file can be re-picked
+  }
+}
+
+async function saveUserProfile() {
+  if (!_editingUserId) return;
+  const btn = document.getElementById('editUserSaveBtn');
+  const err = document.getElementById('editUserError');
+  err.classList.remove('show');
+
+  // Capture any chip the admin typed but didn't press Enter on
+  const trailingRole = document.getElementById('editEmployeeRolesInput').value.trim();
+  if (trailingRole && !_chipState.editEmployeeRoles.includes(trailingRole)) _chipState.editEmployeeRoles.push(trailingRole);
+
+  const updates = {
+    full_name:      document.getElementById('editUserFullName').value.trim(),
+    username:       document.getElementById('editUserUsername').value.trim(),
+    job_title:      document.getElementById('editUserJobTitle').value.trim(),
+    bio:            document.getElementById('editUserBio').value.trim(),
+    role:           document.getElementById('editUserRole').value,
+    employee_roles: [..._chipState.editEmployeeRoles],
+  };
+  if (_stagedAvatarUrl) updates.avatar_url = _stagedAvatarUrl;
+  if (!updates.full_name) { err.textContent = 'Full name is required'; err.classList.add('show'); return; }
+
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const { error } = await db.from('profiles').update(updates).eq('id', _editingUserId);
+    if (error) throw error;
+    showToast('Profile updated', 'success');
+    closeEditUserModal();
+    await loadUsers();
+    renderUserList();
+  } catch (e) {
+    err.textContent = 'Save failed: ' + (e.message || e);
+    err.classList.add('show');
+  } finally {
+    btn.disabled = false; btn.textContent = '💾 Save Changes';
+  }
+}
+
+function renderUserList() {
+  const container = document.getElementById('userList');
+  if (!allUsers.length) { container.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><div class="empty-text">No users yet</div></div>'; return; }
+
+  container.innerHTML = allUsers.map(u => {
+    const userLogs  = allLogs.filter(l => l.user_id === u.id);
+    const totalHrs  = userLogs.reduce((s, l) => s + parseFloat(l.hours_spent||0), 0);
+    const lvl       = getUserLevel(totalHrs);
+    const initials  = u.full_name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+    const isSelf    = u.id === session.id;
+    const avatarInner = u.avatar_url
+      ? `<img src="${u.avatar_url}" alt="${u.full_name}" onerror="this.outerHTML='${initials}'" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />`
+      : initials;
+    // Surface employee roles as small inline chips next to the meta line
+    const roles = Array.isArray(u.employee_roles) ? u.employee_roles : [];
+    const rolesHtml = roles.length
+      ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">${roles.slice(0, 4).map(r => `<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:var(--bg-surface);border:1px solid var(--border);font-size:10px;font-weight:600;color:var(--text-2);">${String(r).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</span>`).join('')}${roles.length > 4 ? `<span style="font-size:10px;color:var(--text-3);align-self:center;">+${roles.length - 4}</span>` : ''}</div>`
+      : '';
+    return `<div class="user-card">
+      <div class="user-avatar ${lvl.class}" data-user-id="${u.id}" style="width:40px;height:40px;font-size:13px;border-color:${lvl.color};background:linear-gradient(135deg,${lvl.color}33,${lvl.color}11);overflow:hidden;">${avatarInner}</div>
+      <div class="user-card-info">
+        <div class="user-card-name">${u.full_name}${u.role==='admin'?'<span class="admin-tag">ADMIN</span>':''}</div>
+        <div class="user-card-meta">@${u.username} · ${totalHrs.toFixed(1)}h · ${userLogs.length} tasks</div>
+        ${rolesHtml}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" onclick="viewUser('${u.id}')">View →</button>
+        <button class="btn btn-secondary btn-sm" title="Edit profile" onclick="openEditUserModal('${u.id}')">✏️ Edit</button>
+        ${isSelf ? '' : `<button class="btn btn-secondary btn-sm" title="Reset Password" onclick="openResetPassModal('${u.id}','${u.full_name.replace(/'/g,"\\'")}')">🔑</button>`}
+        ${isSelf ? '' : `<button class="btn btn-danger btn-sm btn-icon" title="Delete" onclick="openDeleteUserModal('${u.id}','${u.full_name.replace(/'/g,"\\'")}')">🗑️</button>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Delete User ────────────────────────────────────────────
+let deletingUserId = null;
+
+function openDeleteUserModal(uid, name) {
+  deletingUserId = uid;
+  document.getElementById('deleteUserName').textContent = name;
+  const logs = allLogs.filter(l => l.user_id === uid).length;
+  document.getElementById('deleteUserLogCount').textContent = logs > 0
+    ? `⚠️ This will also permanently delete their ${logs} task log${logs!==1?'s':''}.`
+    : 'This user has no task logs.';
+  document.getElementById('deleteUserModal').classList.add('open');
+}
+
+function closeDeleteUserModal() {
+  document.getElementById('deleteUserModal').classList.remove('open');
+  deletingUserId = null;
+}
+
+async function confirmDeleteUser() {
+  if (!deletingUserId) return;
+  const btn = document.getElementById('confirmDeleteUserBtn');
+  btn.disabled = true; btn.textContent = 'Deleting…';
+
+  // task_logs are cascade-deleted via FK, so just delete the user
+  const { error } = await db.from('profiles').delete().eq('id', deletingUserId);
+
+  if (error) {
+    showToast('Failed to delete user: ' + error.message, 'error');
+  } else {
+    showToast('User deleted successfully', 'success');
+    closeDeleteUserModal();
+    if (selectedUserId === deletingUserId) {
+      document.getElementById('userDetailSection').style.display = 'none';
+      selectedUserId = null;
+    }
+    await Promise.all([loadUsers(), loadAllLogs()]);
+    renderUserList();
+    populateFilters();
+    setupExportSelects();
+  }
+  btn.disabled = false; btn.textContent = '🗑️ Delete User';
+}
+
+async function viewUser(uid) {
+  selectedUserId = uid;
+  const user    = allUsers.find(u => u.id === uid);
+  const logs    = allLogs.filter(l => l.user_id === uid);
+  const stats   = calculateStats(logs);
+  const lvl     = getUserLevel(stats.totalHours);
+  const initials = user.full_name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+
+  const section = document.getElementById('userDetailSection');
+  section.style.display = 'block';
+  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const detailAvatar = user.avatar_url
+    ? `<img src="${user.avatar_url}" alt="${user.full_name}" onerror="this.outerHTML='${initials}'" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />`
+    : initials;
+  document.getElementById('userDetailHeader').innerHTML = `
+    <div class="user-avatar ${lvl.class}" data-user-id="${user.id}" style="border-color:${lvl.color};background:linear-gradient(135deg,${lvl.color}33,${lvl.color}11);overflow:hidden;">${detailAvatar}</div>
+    <div>
+      <div style="font-size:18px;font-weight:800;">${user.full_name}</div>
+      <div style="font-size:13px;color:var(--text-2);">@${user.username}</div>
+    </div>`;
+
+  document.getElementById('userDetailKPIs').innerHTML = `
+    <div class="kpi-card accent-purple"><span class="kpi-icon">⏱️</span><div class="kpi-label">Total Hours</div><div class="kpi-value">${stats.totalHours}h</div></div>
+    <div class="kpi-card accent-gold"><span class="kpi-icon">📋</span><div class="kpi-label">Total Tasks</div><div class="kpi-value">${stats.totalTasks}</div></div>`;
+
+  document.getElementById('userDetailTitle').textContent = `${user.full_name}'s Records`;
+
+  if (!logs.length) {
+    document.getElementById('userDetailTable').innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">No records yet</div></div>`;
+    return;
+  }
+  document.getElementById('userDetailTable').innerHTML = `
+    <table><thead><tr><th>Date</th><th>Task</th><th>Category</th><th>Hours</th><th>Accomplishment</th><th>Notes</th><th>Action</th></tr></thead>
+    <tbody>
+      ${logs.map(l => `<tr style="cursor:pointer;" onclick="openLogView('${l.id}')">
+        <td class="td-sm">${formatDate(l.log_date)}</td>
+        <td>${truncate(l.task_project,40)}</td>
+        <td>${categoryBadge(l.category)}<span style='font-size:11px;color:var(--text-3);display:block;margin-top:2px;'>${l.sub_category||''}</span></td>
+        <td><strong>${safeNum(l.hours_spent, 1)}h</strong></td>
+        <td class="td-sm">${l.accomplishment_status === 'pending' ? '<span style="color:var(--warning);font-weight:700;">🕒 Pending</span> ' : ''}${truncate(l.accomplishment,40)}</td>
+        <td class="td-muted td-sm">${truncate(l.comments_notes,35)}</td>
+        <td onclick="event.stopPropagation()"><button class="btn btn-secondary btn-sm btn-icon" onclick="openAdminEdit('${l.id}')">✏️</button></td>
+      </tr>`).join('')}
+    </tbody></table>`;
+}
+
+function exportUserCSV() {
+  if (!selectedUserId) return;
+  const user = allUsers.find(u => u.id === selectedUserId);
+  const logs = allLogs.filter(l => l.user_id === selectedUserId).map(l => ({
+    date: l.log_date, member: l.team_member, task: l.task_project,
+    description: l.task_description, category: l.category, hours: l.hours_spent,
+    accomplishment: l.accomplishment, notes: l.comments_notes
+  }));
+  exportToCSV(logs, `${user.username}_logs.csv`);
+}
+
+// ── EmailJS Configuration ──────────────────────────────────
+let emailjsConfig = { serviceId:'', templateId:'', publicKey:'' };
+
+async function loadEmailjsConfig() {
+  const { data, error } = await db.from('app_settings')
+    .select('key,value')
+    .in('key',['emailjs_service_id','emailjs_template_id','emailjs_public_key']);
+  if (error) {
+    console.error('loadEmailjsConfig error:', error);
+    showToast('Could not load EmailJS config: ' + error.message, 'warning');
+    return;
+  }
+  (data||[]).forEach(r => {
+    const map = { emailjs_service_id:'emailjsServiceId', emailjs_template_id:'emailjsTemplateId', emailjs_public_key:'emailjsPublicKey' };
+    const el = document.getElementById(map[r.key]);
+    if (el) el.value = r.value || '';
+    if (r.key==='emailjs_service_id')  emailjsConfig.serviceId  = r.value||'';
+    if (r.key==='emailjs_template_id') emailjsConfig.templateId = r.value||'';
+    if (r.key==='emailjs_public_key')  emailjsConfig.publicKey  = r.value||'';
+  });
+  if (emailjsConfig.publicKey) {
+    try { emailjs.init({ publicKey: emailjsConfig.publicKey }); } catch(e){}
+  }
+}
+
+async function saveEmailjsConfig() {
+  const sid = document.getElementById('emailjsServiceId').value.trim();
+  const tid = document.getElementById('emailjsTemplateId').value.trim();
+  const pk  = document.getElementById('emailjsPublicKey').value.trim();
+  if (!sid || !tid || !pk) { showToast('Fill in all three EmailJS fields','warning'); return; }
+  const upserts = [
+    { key:'emailjs_service_id',  value:sid, label:'EmailJS Service ID',  updated_by:session.id },
+    { key:'emailjs_template_id', value:tid, label:'EmailJS Template ID',  updated_by:session.id },
+    { key:'emailjs_public_key',  value:pk,  label:'EmailJS Public Key',   updated_by:session.id },
+  ];
+  const { error } = await db.from('app_settings').upsert(upserts, { onConflict:'key' });
+  if (error) { showToast('Failed: '+error.message,'error'); return; }
+  emailjsConfig = { serviceId:sid, templateId:tid, publicKey:pk };
+  try { emailjs.init({ publicKey: pk }); } catch(e){}
+  showToast('EmailJS config saved! ✅','success');
+  document.getElementById('emailConfigStatus').innerHTML =
+    '<span style="color:var(--success);">✅ Config saved. EmailJS is ready to send notifications.</span>';
+}
+
+async function testEmail() {
+  const addr = document.getElementById('testEmailAddr').value.trim();
+  if (!addr) { showToast('Enter a test email address','warning'); return; }
+  if (!emailjsConfig.serviceId || !emailjsConfig.templateId || !emailjsConfig.publicKey) {
+    showToast('Save your EmailJS config first','warning'); return;
+  }
+  try {
+    emailjs.init({ publicKey: emailjsConfig.publicKey });
+    await emailjs.send(emailjsConfig.serviceId, emailjsConfig.templateId, {
+      to_email:      addr,
+      to_name:       'Test User',
+      from_name:     session.fullName,
+      task_title:    'Test Task — EBS Tracker',
+      task_priority: 'High',
+      task_due:      'N/A',
+      app_url:       window.location.origin + '/worktracker/tasks.html',
+    });
+    showToast('Test email sent! Check your inbox ✅','success');
+  } catch(err) {
+    showToast('Failed to send: '+(err?.text||err?.message||JSON.stringify(err)),'error');
+  }
+}
+
+async function sendTaskAssignmentEmail(toUser, taskTitle, taskPriority, taskDue) {
+  if (!emailjsConfig.serviceId || !emailjsConfig.templateId || !emailjsConfig.publicKey) return;
+  if (!toUser.email) return; // No email set for this user
+  try {
+    emailjs.init({ publicKey: emailjsConfig.publicKey });
+    await emailjs.send(emailjsConfig.serviceId, emailjsConfig.templateId, {
+      to_email:      toUser.email,
+      to_name:       toUser.full_name,
+      from_name:     session.fullName,
+      task_title:    taskTitle,
+      task_priority: taskPriority,
+      task_due:      taskDue || 'No due date',
+      app_url:       window.location.origin + '/worktracker/tasks.html',
+    });
+    console.log('Email sent to', toUser.email);
+  } catch(err) {
+    console.warn('Email send failed:', err);
+  }
+}
+
+// ── User Email Management ───────────────────────────────────
+async function loadUserEmailList() {
+  const el = document.getElementById('userEmailList');
+  if (!el) return;
+  const { data } = await db.from('profiles').select('id,full_name,email').order('full_name');
+  if (!data||!data.length) { el.innerHTML='<div style="color:var(--text-3);font-size:13px;">No users found.</div>'; return; }
+  el.innerHTML = data.map(u => `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg-surface);border-radius:var(--radius);border:1px solid var(--border);flex-wrap:wrap;">
+      <span style="font-weight:600;font-size:13px;min-width:140px;">👤 ${u.full_name}</span>
+      <input type="email" id="uemail-${u.id}" class="form-control" value="${u.email||''}" placeholder="user@company.com" style="flex:1;min-width:200px;" />
+      <button class="btn btn-primary btn-sm" onclick="saveUserEmail('${u.id}')">💾 Save</button>
+    </div>`).join('');
+}
+
+async function saveUserEmail(uid) {
+  const val = document.getElementById('uemail-'+uid)?.value.trim() || '';
+  const { error } = await db.from('profiles').update({ email: val }).eq('id', uid);
+  if (error) showToast('Failed: '+error.message,'error');
+  else {
+    showToast('Email saved ✅','success');
+    // Update local cache
+    const u = allUsers.find(x=>x.id===uid);
+    if (u) u.email = val;
+  }
+}
+
+// ── Reset Password ─────────────────────────────────────────
+let resetPassUserId = null;
+
+function openResetPassModal(uid, name) {
+  resetPassUserId = uid;
+  document.getElementById('resetPassName').textContent = name;
+  document.getElementById('resetPassInput').value = '';
+  document.getElementById('resetPassConfirm').value = '';
+  document.getElementById('resetPassError').classList.remove('show');
+  document.getElementById('resetPassModal').classList.add('open');
+}
+function closeResetPassModal() { document.getElementById('resetPassModal').classList.remove('open'); resetPassUserId = null; }
+
+async function saveResetPassword() {
+  const btn = document.getElementById('resetPassBtn');
+  const err = document.getElementById('resetPassError');
+  err.classList.remove('show');
+  const pass    = document.getElementById('resetPassInput').value;
+  const confirm = document.getElementById('resetPassConfirm').value;
+  if (!pass || pass.length < 6) { err.textContent = 'Password must be at least 6 characters'; err.classList.add('show'); return; }
+  if (pass !== confirm)          { err.textContent = 'Passwords do not match'; err.classList.add('show'); return; }
+  btn.disabled = true; btn.textContent = 'Saving…';
+  // Get the user's email from allUsers, then send a Supabase password reset email
+  const targetUser = allUsers.find(u => u.id === resetPassUserId);
+  if (!targetUser?.email) {
+    err.textContent = 'No email on file for this user. Add an email first.';
+    err.classList.add('show');
+    btn.disabled = false; btn.textContent = '🔑 Send Reset Link';
+    return;
+  }
+  const { error } = await db.auth.resetPasswordForEmail(targetUser.email);
+  if (error) { err.textContent = 'Failed: ' + error.message; err.classList.add('show'); }
+  else { showToast('Password reset email sent to ' + targetUser.email + ' 🔑', 'success'); closeResetPassModal(); }
+  btn.disabled = false; btn.textContent = '🔑 Send Reset Link';
+}
+
+// ── Records Tab ────────────────────────────────────────────
+async function populateFilters() {
+  const userSelectors = ['recFilterUser', 'exportUserSel'];
+  userSelectors.forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">All Members</option>';
+    allUsers.forEach(u => { const o = new Option(u.full_name, u.id); sel.appendChild(o); });
+  });
+  const months = [...new Set(allLogs.map(l => l.month))];
+  ['recFilterMonth','compMonth','exportMonthSel'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const defaultOpt = id === 'exportMonthSel' ? 'All Months' : (id === 'compMonth' ? 'All Months' : 'All Months');
+    sel.innerHTML = `<option value="">${defaultOpt}</option>`;
+    months.forEach(m => { const o = new Option(m, m); sel.appendChild(o); });
+  });
+  // Populate the Records and Export category dropdowns from the live
+  // admin-managed category list. Stays in sync as admin adds/hides them.
+  const cats = await loadCategories();
+  ['recFilterCat','exportCatSel'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">All Categories</option>';
+    cats.forEach(c => sel.appendChild(new Option(c.name, c.name)));
+  });
+  ['recFilterUser','recFilterCat','recFilterMonth','recSearch','recFilterSubcat'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', renderRecordsTable);
+  });
+}
+
+function onRecCatChange() {
+  const cat = document.getElementById('recFilterCat').value;
+  const sel = document.getElementById('recFilterSubcat');
+  sel.innerHTML = '<option value="">All Sub-Categories</option>';
+  const pool = cat ? allLogs.filter(l=>l.category===cat) : allLogs;
+  const subs = [...new Set(pool.map(l=>l.sub_category).filter(Boolean))].sort();
+  subs.forEach(s => sel.appendChild(new Option(s,s)));
+  renderRecords();
+}
+
+function getFilteredRecords() {
+  const uid    = document.getElementById('recFilterUser').value;
+  const cat    = document.getElementById('recFilterCat').value;
+  const subcat = document.getElementById('recFilterSubcat')?.value || '';
+  const month  = document.getElementById('recFilterMonth').value;
+  const search = document.getElementById('recSearch').value.toLowerCase().trim();
+  return allLogs.filter(l => {
+    if (uid    && l.user_id      !== uid)    return false;
+    if (cat    && l.category     !== cat)    return false;
+    if (subcat && l.sub_category !== subcat) return false;
+    if (month  && l.month        !== month)  return false;
+    if (search) {
+      const hay = [l.task_project, l.task_description, l.accomplishment, l.team_member, l.comments_notes].join(' ').toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+}
+
+function clearRecFilters() {
+  ['recFilterUser','recFilterCat','recFilterMonth','recFilterSubcat'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('recSearch').value = '';
+  renderRecordsTable();
+}
+
+function renderRecordsTable() {
+  const logs = getFilteredRecords();
+  document.getElementById('recRowCount').textContent = `${logs.length} records`;
+  const tbody = document.getElementById('recTableBody');
+  if (!logs.length) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">No records found</div></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = logs.map(l => {
+    const pendingBadge = l.accomplishment_status === 'pending'
+      ? '<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,0.18);color:var(--warning);font-size:9px;font-weight:800;letter-spacing:.04em;margin-right:4px;">🕒 PENDING</span>'
+      : l.accomplishment_status === 'rejected'
+      ? '<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(239,68,68,0.18);color:var(--p-urgent);font-size:9px;font-weight:800;letter-spacing:.04em;margin-right:4px;">⛔ REJECTED</span>'
+      : '';
+    // Whole row opens a view modal. Edit pencil stops propagation so it
+    // still goes straight to the edit form.
+    return `<tr style="cursor:pointer;" onclick="openLogView('${l.id}')">
+    <td class="td-sm">${formatDate(l.log_date)}</td>
+    <td><strong>${l.team_member || l.profiles?.full_name || '—'}</strong></td>
+    <td>${truncate(l.task_project, 35)}</td>
+    <td>${categoryBadge(l.category)}<span style='font-size:11px;color:var(--text-3);display:block;margin-top:2px;'>${l.sub_category||''}</span></td>
+    <td><strong>${safeNum(l.hours_spent, 1)}h</strong></td>
+    <td class="td-sm">${pendingBadge}${truncate(l.accomplishment, 35)}</td>
+    <td class="td-muted td-sm">${truncate(l.comments_notes, 30)}</td>
+    <td onclick="event.stopPropagation()"><button class="btn btn-secondary btn-sm btn-icon" onclick="openAdminEdit('${l.id}')">✏️</button></td>
+  </tr>`;
+  }).join('');
+}
+
+// View-only modal showing full log details (description + comments + accomplishment).
+// Lives next to the edit modal — the edit button on the row still goes
+// straight to openAdminEdit; clicking the row body opens this read-only one.
+function openLogView(id) {
+  const l = allLogs.find(x => x.id === id);
+  if (!l) return;
+  const accStatus = l.accomplishment_status;
+  const accBadge = accStatus === 'pending' ? '<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:rgba(245,158,11,0.18);color:var(--warning);font-size:10px;font-weight:800;letter-spacing:.04em;margin-left:6px;">🕒 PENDING</span>'
+    : accStatus === 'rejected' ? '<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,0.18);color:var(--p-urgent);font-size:10px;font-weight:800;letter-spacing:.04em;margin-left:6px;">⛔ REJECTED</span>'
+    : '';
+  const fieldRow = (label, value) => value && String(value).trim()
+    ? `<div><div style="font-size:10px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">${label}</div><div style="font-size:13px;color:var(--text-1);line-height:1.5;white-space:pre-wrap;">${value}</div></div>`
+    : '';
+  document.getElementById('logViewBody').innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="font-size:12px;color:var(--text-3);font-weight:600;">👤 ${l.team_member || l.profiles?.full_name || '—'}</span>
+      <span style="font-size:12px;color:var(--text-3);">📅 ${formatDate(l.log_date)}</span>
+      <span style="font-size:12px;color:var(--text-3);">⏱️ ${safeNum(l.hours_spent, 1)}h</span>
+      ${categoryBadge(l.category)}
+      ${l.sub_category ? `<span style="font-size:11px;color:var(--text-3);">${l.sub_category}</span>` : ''}
+      ${l.is_completed ? '<span class="completed-badge" style="font-size:10px;">✅ Completed</span>' : ''}
+    </div>
+    ${fieldRow('📋 Task / Project', l.task_project)}
+    ${fieldRow('📝 Task Description', l.task_description)}
+    <div>
+      <div style="font-size:10px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">🏆 Key Accomplishment ${accBadge}</div>
+      <div style="font-size:13px;color:var(--text-1);line-height:1.5;white-space:pre-wrap;">${l.accomplishment && l.accomplishment.trim() ? l.accomplishment : '<span style="color:var(--text-3);">—</span>'}</div>
+      ${accStatus === 'rejected' && l.rejection_reason ? `<div style="font-size:11px;color:var(--p-urgent);margin-top:4px;font-weight:600;">Reason: ${l.rejection_reason}</div>` : ''}
+    </div>
+    ${fieldRow('💬 Comments / Notes', l.comments_notes)}
+  `;
+  // Wire the Edit button to open the edit modal for the same row.
+  document.getElementById('logViewEditBtn').onclick = () => { closeLogViewModal(); openAdminEdit(id); };
+  document.getElementById('logViewModal').classList.add('open');
+}
+function closeLogViewModal() { document.getElementById('logViewModal').classList.remove('open'); }
+
+// ── Pending Approvals Tab ──────────────────────────────────
+// Lists every task_log with accomplishment_status='pending'. Approve →
+// status='approved' + approved_by/at stamps. Reject → modal collects
+// reason, then status='rejected' + rejection_reason. Refresh count
+// badge after every action.
+let _rejectingApprovalId = null;
+const _expandedApprovalIds = new Set();
+
+function toggleApprovalDetails(id) {
+  if (_expandedApprovalIds.has(id)) _expandedApprovalIds.delete(id);
+  else _expandedApprovalIds.add(id);
+  loadApprovalsTab();
+}
+
+async function refreshApprovalsCountBadge() {
+  try {
+    const { count } = await db.from('task_logs').select('id', { count: 'exact', head: true }).eq('accomplishment_status', 'pending');
+    const badge = document.getElementById('approvalsCountBadge');
+    if (!badge) return;
+    if (count && count > 0) { badge.textContent = count; badge.style.display = 'inline-block'; }
+    else { badge.style.display = 'none'; }
+  } catch (e) { /* migration not applied — silently skip */ }
+}
+
+// Active filter on the Approvals tab. Defaults to 'pending' so admin
+// always lands on the queue that needs action; can be changed via the
+// chip row to view 'approved' / 'rejected' / 'all' history.
+let _approvalsFilter = 'pending';
+
+function setApprovalsFilter(v) {
+  _approvalsFilter = v;
+  loadApprovalsTab();
+}
+
+async function loadApprovalsTab() {
+  const list = document.getElementById('approvalsList');
+  const bar  = document.getElementById('approvalsFilterBar');
+  if (!list) return;
+  list.innerHTML = '<div class="loading"><div class="spinner"></div> Loading…</div>';
+
+  let rows = [];
+  try {
+    let q = db.from('task_logs')
+      .select('id, log_date, task_project, task_description, accomplishment, accomplishment_status, rejection_reason, approved_at, comments_notes, hours_spent, category, sub_category, user_id, profiles!user_id(full_name), approver:profiles!approved_by(full_name)')
+      .not('accomplishment', 'is', null)
+      .neq('accomplishment', '')
+      .order('log_date', { ascending: false });
+    if (_approvalsFilter !== 'all') q = q.eq('accomplishment_status', _approvalsFilter);
+    const { data, error } = await q;
+    if (error) throw error;
+    rows = data || [];
+  } catch (e) {
+    list.innerHTML = '<div style="padding:14px;background:var(--bg-surface);border:1px dashed var(--border);border-radius:var(--radius-lg);font-size:12px;color:var(--text-3);">📦 Run the <code>2026-04-25_assigned-links-and-accomplishment-approval.sql</code> migration in Supabase to enable accomplishment approvals.</div>';
+    if (bar) bar.innerHTML = '';
+    return;
+  }
+
+  refreshApprovalsCountBadge();
+
+  // Render the filter chip row (with live counts pulled from the same
+  // query semantics, but counted client-side from a single fetch when
+  // the filter is 'all'; otherwise we trust the count to show the
+  // current bucket plus the badge total for pending).
+  if (bar) {
+    const meta = [
+      { key: 'pending',  label: '🕒 Pending',  color: 'var(--warning)' },
+      { key: 'approved', label: '✓ Approved',  color: 'var(--success)' },
+      { key: 'rejected', label: '⛔ Rejected', color: 'var(--p-urgent)' },
+      { key: 'all',      label: '📋 All',      color: 'var(--text-2)' },
+    ];
+    bar.innerHTML = meta.map(m => {
+      const active = _approvalsFilter === m.key;
+      return `<button type="button" onclick="setApprovalsFilter('${m.key}')" style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;transition:.15s;border:1px solid ${active ? m.color : 'var(--border)'};background:${active ? m.color + '22' : 'transparent'};color:${active ? m.color : 'var(--text-2)'};">${m.label}</button>`;
+    }).join('');
+  }
+
+  if (!rows.length) {
+    const emptyMsg = _approvalsFilter === 'pending'
+      ? '🎉 No pending accomplishments. All caught up.'
+      : _approvalsFilter === 'approved'
+      ? 'No approved accomplishments yet.'
+      : _approvalsFilter === 'rejected'
+      ? 'No rejected accomplishments yet.'
+      : 'No accomplishments to display.';
+    list.innerHTML = `<div style="padding:30px;text-align:center;color:var(--text-3);font-size:13px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);">${emptyMsg}</div>`;
+    return;
+  }
+
+  list.innerHTML = rows.map(l => {
+    const name = l.profiles?.full_name || '—';
+    const isOpen = _expandedApprovalIds.has(l.id);
+    const hasExtra = (l.task_description && l.task_description.trim()) || (l.comments_notes && l.comments_notes.trim()) || (l.accomplishment_status === 'rejected' && l.rejection_reason);
+    const status = l.accomplishment_status;
+    const accentColor = status === 'pending' ? 'var(--warning)' : status === 'approved' ? 'var(--success)' : status === 'rejected' ? 'var(--p-urgent)' : 'var(--border)';
+    const statusPill = status === 'pending'
+      ? '<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(245,158,11,0.18);color:var(--warning);font-size:10px;font-weight:800;letter-spacing:.04em;">🕒 PENDING</span>'
+      : status === 'approved'
+      ? '<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(34,197,94,0.18);color:var(--success);font-size:10px;font-weight:800;letter-spacing:.04em;">✓ APPROVED</span>'
+      : status === 'rejected'
+      ? '<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(239,68,68,0.18);color:var(--p-urgent);font-size:10px;font-weight:800;letter-spacing:.04em;">⛔ REJECTED</span>'
+      : '';
+    const approverNote = (status === 'approved' || status === 'rejected') && l.approved_at
+      ? `<span style="font-size:11px;color:var(--text-3);">${status === 'approved' ? '✓' : '⛔'} ${l.approver?.full_name || 'admin'} · ${formatDate(l.approved_at.slice(0,10))}</span>`
+      : '';
+
+    // Action buttons — only Pending shows Approve/Reject. Approved
+    // shows a "Revert to Pending" option, Rejected shows "Re-approve".
+    let actions = '';
+    if (status === 'pending') {
+      actions = `
+        <button class="btn btn-success btn-sm" onclick="approveApproval('${l.id}')">✓ Approve</button>
+        <button class="btn btn-danger btn-sm" onclick="openRejectModal('${l.id}','${name.replace(/'/g,"\\'")}')">⛔ Reject</button>`;
+    } else if (status === 'approved') {
+      actions = `<button class="btn btn-secondary btn-sm" onclick="revertApprovalStatus('${l.id}','pending')">↺ Move to Pending</button>`;
+    } else if (status === 'rejected') {
+      actions = `
+        <button class="btn btn-success btn-sm" onclick="approveApproval('${l.id}')">✓ Approve</button>
+        <button class="btn btn-secondary btn-sm" onclick="revertApprovalStatus('${l.id}','pending')">↺ Move to Pending</button>`;
+    }
+
+    return `
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="padding:14px 18px;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:240px;cursor:${hasExtra ? 'pointer' : 'default'};" onclick="${hasExtra ? `toggleApprovalDetails('${l.id}')` : ''}">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
+              <span style="font-weight:800;font-size:14px;">👤 ${name}</span>
+              ${statusPill}
+              <span style="font-size:11px;color:var(--text-3);">📅 ${formatDate(l.log_date)}</span>
+              <span style="font-size:11px;color:var(--text-3);">⏱️ ${safeNum(l.hours_spent, 1)}h</span>
+              ${l.category ? categoryBadge(l.category) : ''}
+              <span style="font-size:11px;color:var(--text-3);">📋 ${truncate(l.task_project, 50)}</span>
+              ${approverNote}
+              ${hasExtra ? `<span style="font-size:11px;color:var(--text-3);margin-left:auto;">${isOpen ? '▼ Hide details' : '▶ Show details'}</span>` : ''}
+            </div>
+            <div style="font-size:14px;line-height:1.4;color:var(--text-1);background:var(--bg-surface);padding:10px 12px;border-radius:var(--radius);border-left:3px solid ${accentColor};">
+              "${l.accomplishment || ''}"
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0;">${actions}</div>
+        </div>
+        ${isOpen ? `
+          <div style="padding:0 18px 14px;border-top:1px solid var(--border);background:rgba(0,0,0,0.02);">
+            ${status === 'rejected' && l.rejection_reason ? `
+              <div style="margin-top:12px;">
+                <div style="font-size:10px;font-weight:800;color:var(--p-urgent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">⛔ Rejection Reason</div>
+                <div style="font-size:13px;line-height:1.5;color:var(--text-2);">${l.rejection_reason}</div>
+              </div>` : ''}
+            ${l.task_description && l.task_description.trim() ? `
+              <div style="margin-top:12px;">
+                <div style="font-size:10px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">📝 Task Description</div>
+                <div style="font-size:13px;line-height:1.5;color:var(--text-2);">${l.task_description}</div>
+              </div>` : ''}
+            ${l.comments_notes && l.comments_notes.trim() ? `
+              <div style="margin-top:12px;">
+                <div style="font-size:10px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">💬 Comments / Notes</div>
+                <div style="font-size:13px;line-height:1.5;color:var(--text-2);">${l.comments_notes}</div>
+              </div>` : ''}
+            ${l.sub_category ? `
+              <div style="margin-top:12px;font-size:11px;color:var(--text-3);">Sub-category: <strong style="color:var(--text-2);">${l.sub_category}</strong></div>` : ''}
+          </div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+async function revertApprovalStatus(id, newStatus) {
+  if (!confirm(`Move this accomplishment back to ${newStatus}?`)) return;
+  const { error } = await db.from('task_logs').update({
+    accomplishment_status: newStatus,
+    approved_by: null,
+    approved_at: null,
+    rejection_reason: newStatus === 'pending' ? null : undefined,
+  }).eq('id', id);
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else { showToast('Moved to ' + newStatus, 'success'); loadApprovalsTab(); }
+}
+
+async function approveApproval(id) {
+  const { error } = await db.from('task_logs').update({
+    accomplishment_status: 'approved',
+    approved_by: session.id,
+    approved_at: new Date().toISOString(),
+    rejection_reason: null,
+  }).eq('id', id);
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else { showToast('Approved ✓', 'success'); loadApprovalsTab(); }
+}
+
+function openRejectModal(id, name) {
+  _rejectingApprovalId = id;
+  document.getElementById('rejectReasonContext').textContent = `Reject ${name}'s accomplishment? They'll see your reason.`;
+  document.getElementById('rejectReasonText').value = '';
+  document.getElementById('rejectReasonModal').style.display = 'flex';
+}
+
+function closeRejectModal() {
+  document.getElementById('rejectReasonModal').style.display = 'none';
+  _rejectingApprovalId = null;
+}
+
+async function confirmRejectApproval() {
+  const reason = document.getElementById('rejectReasonText').value.trim();
+  if (!reason) { showToast('Please enter a reason', 'warning'); return; }
+  if (!_rejectingApprovalId) return;
+  const { error } = await db.from('task_logs').update({
+    accomplishment_status: 'rejected',
+    approved_by: session.id,
+    approved_at: new Date().toISOString(),
+    rejection_reason: reason,
+  }).eq('id', _rejectingApprovalId);
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else {
+    showToast('Rejected', 'success');
+    closeRejectModal();
+    loadApprovalsTab();
+  }
+}
+
+// ── Badges Tab (admin-defined, auto-assigned) ───────────────
+// Reads from `badges` and `user_badges`. Conditions are evaluated by
+// utils.js::evaluateBadge against per-user calculateStats output.
+let badgeEditId = null;
+let _badgeAdminCategoriesCache = null;
+
+async function loadBadgesTab() {
+  const grid = document.getElementById('badgesGrid');
+  if (!grid) return;
+  grid.innerHTML = '<div class="loading"><div class="spinner"></div> Loading badges…</div>';
+
+  let badges = [];
+  let migrated = true;
+  try {
+    const { data, error } = await db.from('badges').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    badges = data || [];
+  } catch (e) {
+    migrated = false;
+  }
+
+  if (!migrated) {
+    grid.innerHTML = '<div style="grid-column:1/-1;padding:14px;background:var(--bg-surface);border:1px dashed var(--border);border-radius:var(--radius-lg);font-size:12px;color:var(--text-3);">📦 Run the <code>2026-04-24_categories-badges-doneat.sql</code> migration in Supabase to enable the badges system.</div>';
+    return;
+  }
+
+  // Eligibility counts: how many existing users would currently match each badge.
+  const counts = await computeBadgeEligibility(badges);
+
+  if (!badges.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;padding:14px;font-size:12px;color:var(--text-3);">No badges yet. Click "+ New Badge" to create one.</div>';
+    return;
+  }
+
+  grid.innerHTML = badges.map(b => `
+    <div class="card" style="${!b.is_active ? 'opacity:.55;' : ''}">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+        <div style="font-size:32px;line-height:1;">${b.icon || '🏅'}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:800;font-size:15px;">${b.name}${!b.is_active ? ' <span style="font-size:10px;color:var(--warning);font-weight:600;">INACTIVE</span>' : ''}</div>
+          <div style="font-size:11px;color:var(--text-3);">${badgeConditionLabel(b)}</div>
+        </div>
+      </div>
+      ${b.description ? `<div style="font-size:12px;color:var(--text-2);margin-bottom:10px;">${b.description}</div>` : ''}
+      <div style="font-size:11px;color:var(--text-3);padding:6px 10px;background:var(--bg-surface);border-radius:var(--radius-sm);margin-bottom:10px;">
+        👥 <strong style="color:var(--text-1)">${counts[b.id] || 0}</strong> user${(counts[b.id] || 0) === 1 ? '' : 's'} currently match
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" onclick="openEditBadgeModal('${b.id}')">✏️ Edit</button>
+        <button class="btn btn-secondary btn-sm" onclick="toggleBadgeActive('${b.id}', ${b.is_active})">${b.is_active ? '👁️‍🗨️ Hide' : '👁️ Show'}</button>
+        <button class="btn btn-success btn-sm" onclick="syncAllUserBadges()" title="Run evaluator across all users">🔄 Sync</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteBadge('${b.id}', '${b.name.replace(/'/g,"\\'")}')">🗑️</button>
+      </div>
+    </div>`).join('');
+}
+
+function badgeConditionLabel(b) {
+  const c = b.condition_config || {};
+  switch (b.condition_type) {
+    case 'total_hours':      return `⏱️ Total hours ≥ ${c.threshold ?? '?'}`;
+    case 'consecutive_days': return `🔥 ${c.threshold ?? '?'} days in a row`;
+    case 'category_count':   return `📋 ≥ ${c.threshold ?? '?'} tasks in a category`;
+    case 'on_time_rate':     return `✅ ≥ ${c.threshold_pct ?? '?'}% on time (min ${c.min_tasks ?? '?'})`;
+    case 'custom':           return '⚙️ Custom rule';
+    default:                 return b.condition_type;
+  }
+}
+
+// Tiny TTL cache for the assigned-tasks fetch — both
+// computeBadgeEligibility + syncAllUserBadges hit this query and used
+// to fire it twice back-to-back when the admin clicked Sync.
+let _assignedTasksCache = { data: null, ts: 0 };
+async function getAssignedTasksCached(maxAgeMs = 30000) {
+  if (_assignedTasksCache.data && Date.now() - _assignedTasksCache.ts < maxAgeMs) {
+    return _assignedTasksCache.data;
+  }
+  const { data, error } = await db.from('priority_tasks')
+    .select('user_id, status, due_date, done_at')
+    .not('assigned_by', 'is', null);
+  if (error) { console.error('priority_tasks fetch error:', error); return []; }
+  _assignedTasksCache = { data: data || [], ts: Date.now() };
+  return _assignedTasksCache.data;
+}
+
+async function computeBadgeEligibility(badges) {
+  const counts = {};
+  if (!badges.length || !allUsers.length) return counts;
+  // allLogs is already in scope (loaded by loadAllLogs at admin init).
+  // priority_tasks needed only when an on_time_rate badge exists.
+  let assignedTasks = [];
+  if (badges.some(b => b.condition_type === 'on_time_rate')) {
+    assignedTasks = await getAssignedTasksCached();
+  }
+  allUsers.forEach(u => {
+    const userLogs = allLogs.filter(l => l.user_id === u.id);
+    const stats = calculateStats(userLogs);
+    const ctx = { tasks: assignedTasks.filter(t => t.user_id === u.id), logs: userLogs };
+    badges.forEach(b => {
+      if (evaluateBadge(b, stats, ctx)) counts[b.id] = (counts[b.id] || 0) + 1;
+    });
+  });
+  return counts;
+}
+
+async function syncAllUserBadges() {
+  const { data: badges, error: bErr } = await db.from('badges').select('*').eq('is_active', true);
+  if (bErr) { showToast('Sync failed: ' + bErr.message, 'error'); return; }
+  if (!badges) return;
+  // Force a fresh assignedTasks fetch right before sync (TTL is short
+  // but admin may have just changed something). Bypass cache by clearing
+  // the timestamp.
+  _assignedTasksCache.ts = 0;
+  const assignedTasks = await getAssignedTasksCached();
+  const inserts = [];
+  allUsers.forEach(u => {
+    const userLogs = allLogs.filter(l => l.user_id === u.id);
+    const stats = calculateStats(userLogs);
+    const ctx = { tasks: assignedTasks.filter(t => t.user_id === u.id), logs: userLogs };
+    badges.forEach(b => {
+      if (evaluateBadge(b, stats, ctx)) inserts.push({ user_id: u.id, badge_id: b.id });
+    });
+  });
+  if (!inserts.length) { showToast('No new badges to award', 'info'); return; }
+  const { error } = await db.from('user_badges').upsert(inserts, { onConflict: 'user_id,badge_id', ignoreDuplicates: true });
+  if (error) showToast('Sync failed: ' + error.message, 'error');
+  else { showToast(`Awarded ${inserts.length} badge instance${inserts.length === 1 ? '' : 's'}`, 'success'); loadBadgesTab(); }
+}
+
+function openNewBadgeModal() {
+  badgeEditId = null;
+  document.getElementById('badgeModalTitle').textContent = 'New Badge';
+  document.getElementById('badgeModalIcon').value = '🏅';
+  document.getElementById('badgeModalName').value = '';
+  document.getElementById('badgeModalDesc').value = '';
+  document.getElementById('badgeModalConditionType').value = 'total_hours';
+  document.getElementById('badgeModalActive').checked = true;
+  renderBadgeConditionInputs();
+  document.getElementById('badgeModal').style.display = 'flex';
+}
+
+async function openEditBadgeModal(id) {
+  const { data } = await db.from('badges').select('*').eq('id', id).single();
+  if (!data) { showToast('Badge not found', 'error'); return; }
+  badgeEditId = id;
+  document.getElementById('badgeModalTitle').textContent = 'Edit Badge';
+  document.getElementById('badgeModalIcon').value = data.icon || '🏅';
+  document.getElementById('badgeModalName').value = data.name || '';
+  document.getElementById('badgeModalDesc').value = data.description || '';
+  document.getElementById('badgeModalConditionType').value = data.condition_type;
+  document.getElementById('badgeModalActive').checked = !!data.is_active;
+  await renderBadgeConditionInputs(data.condition_config || {});
+  document.getElementById('badgeModal').style.display = 'flex';
+}
+
+function closeBadgeModal() {
+  document.getElementById('badgeModal').style.display = 'none';
+  badgeEditId = null;
+}
+
+async function renderBadgeConditionInputs(prefill) {
+  const type = document.getElementById('badgeModalConditionType').value;
+  const host = document.getElementById('badgeConditionInputs');
+  const cfg = prefill || {};
+  let html = '';
+  if (type === 'total_hours' || type === 'consecutive_days') {
+    html = `<div><label class="form-label">Threshold (${type === 'total_hours' ? 'hours' : 'days'})</label>
+      <input type="number" id="bc_threshold" class="form-control" value="${cfg.threshold ?? ''}" min="1" /></div>`;
+  } else if (type === 'category_count') {
+    if (!_badgeAdminCategoriesCache) _badgeAdminCategoriesCache = await loadCategories();
+    html = `<div><label class="form-label">Category</label>
+        <select id="bc_category" class="form-control">
+          ${_badgeAdminCategoriesCache.map(c => `<option value="${c.id}" ${cfg.category_id === c.id ? 'selected' : ''}>${c.icon || '📁'} ${c.name}</option>`).join('')}
+        </select>
+      </div>
+      <div style="margin-top:10px;"><label class="form-label">Threshold (task count)</label>
+        <input type="number" id="bc_threshold" class="form-control" value="${cfg.threshold ?? ''}" min="1" />
+      </div>`;
+  } else if (type === 'on_time_rate') {
+    html = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div><label class="form-label">Threshold % on time</label>
+        <input type="number" id="bc_pct" class="form-control" value="${cfg.threshold_pct ?? 90}" min="1" max="100" /></div>
+      <div><label class="form-label">Min closed tasks</label>
+        <input type="number" id="bc_minTasks" class="form-control" value="${cfg.min_tasks ?? 5}" min="1" /></div>
+    </div>`;
+  } else if (type === 'custom') {
+    html = `<div><label class="form-label">Condition JSON (your evaluator handles this)</label>
+      <textarea id="bc_json" class="form-control" rows="4" placeholder='{"key": "value"}'>${cfg ? JSON.stringify(cfg, null, 2) : ''}</textarea>
+      <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Evaluator returns false for unknown custom rules — extend evaluateBadge() in utils.js to add support.</div></div>`;
+  }
+  host.innerHTML = html;
+}
+
+async function saveBadgeModal() {
+  const name = document.getElementById('badgeModalName').value.trim();
+  const desc = document.getElementById('badgeModalDesc').value.trim();
+  const icon = document.getElementById('badgeModalIcon').value.trim();
+  const type = document.getElementById('badgeModalConditionType').value;
+  const isActive = document.getElementById('badgeModalActive').checked;
+  if (!name) { showToast('Name is required', 'warning'); return; }
+
+  // Build condition_config based on type
+  let cfg = {};
+  if (type === 'total_hours' || type === 'consecutive_days') {
+    const v = parseInt(document.getElementById('bc_threshold').value);
+    if (!v || v < 1) { showToast('Threshold must be a positive number', 'warning'); return; }
+    cfg = { threshold: v };
+  } else if (type === 'category_count') {
+    const cid = document.getElementById('bc_category')?.value;
+    const v = parseInt(document.getElementById('bc_threshold').value);
+    if (!cid || !v) { showToast('Category and threshold are required', 'warning'); return; }
+    cfg = { category_id: cid, threshold: v };
+  } else if (type === 'on_time_rate') {
+    const pct = parseInt(document.getElementById('bc_pct').value);
+    const mt  = parseInt(document.getElementById('bc_minTasks').value);
+    if (!pct || !mt) { showToast('Percentage and min tasks are required', 'warning'); return; }
+    cfg = { threshold_pct: pct, min_tasks: mt };
+  } else if (type === 'custom') {
+    try { cfg = JSON.parse(document.getElementById('bc_json').value || '{}'); }
+    catch (e) { showToast('JSON parse error: ' + e.message, 'error'); return; }
+  }
+
+  const payload = {
+    name, description: desc || null, icon: icon || null,
+    condition_type: type, condition_config: cfg, is_active: isActive,
+    created_by: session.id,
+  };
+  let res;
+  if (badgeEditId) res = await db.from('badges').update(payload).eq('id', badgeEditId);
+  else res = await db.from('badges').insert(payload);
+  if (res.error) { showToast('Failed: ' + res.error.message, 'error'); return; }
+  showToast(`"${name}" saved`, 'success');
+  closeBadgeModal();
+  _badgeAdminCategoriesCache = null;
+  loadBadgesTab();
+}
+
+async function toggleBadgeActive(id, currentlyActive) {
+  const { error } = await db.from('badges').update({ is_active: !currentlyActive }).eq('id', id);
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else loadBadgesTab();
+}
+
+async function deleteBadge(id, name) {
+  if (!confirm(`Delete badge "${name}"? All earned instances will also be removed.`)) return;
+  const { error } = await db.from('badges').delete().eq('id', id);
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else { showToast(`"${name}" deleted`, 'success'); loadBadgesTab(); }
+}
+
+// ── Comparison Tab ─────────────────────────────────────────
+let compCharts = {};
+let activePeriod = 'all';
+
+// Line+fill colors for the per-employee radar and trend charts. White
+// works in dark mode; in light mode it disappears against the cream
+// surface — flip to the brand text color so the line stays legible.
+function compChartLine() {
+  const isLight = document.body.classList.contains('light-mode');
+  return isLight
+    ? { stroke: '#1a1612', fill: 'rgba(26,22,18,0.10)' }
+    : { stroke: '#ffffff', fill: 'rgba(255,255,255,0.10)' };
+}
+
+// Re-render the comparison view when theme toggles so chart colors
+// update without a manual refresh. Only triggers if the tab is visible.
+document.addEventListener('ebs:theme-changed', () => {
+  const tab = document.getElementById('tab-comparison');
+  if (tab && tab.style.display !== 'none') renderComparison();
+});
+
+function setPeriod(val) {
+  activePeriod = val;
+  document.querySelectorAll('.comp-period-btn').forEach(b => b.classList.toggle('active', b.dataset.val === val));
+  document.getElementById('compMonth').style.display = val === 'month' ? 'block' : 'none';
+  renderComparison();
+}
+
+function destroyCompCharts() {
+  Object.values(compCharts).forEach(c => { try { c.destroy(); } catch(e){} });
+  compCharts = {};
+}
+
+async function renderComparison() {
+  destroyCompCharts();
+  const month = document.getElementById('compMonth').value;
+  let filtered = [...allLogs], periodLabel = 'All Time';
+  if (activePeriod === 'month') {
+    const m = month || getMonthName(new Date());
+    filtered = filtered.filter(l => l.month === m);
+    periodLabel = m;
+  } else if (activePeriod === 'week') {
+    filtered = filtered.filter(l => parseInt(l.week_number) === getWeekNumber(new Date()));
+    periodLabel = 'Week ' + getWeekNumber(new Date());
+  }
+  document.getElementById('compPeriodLabel').textContent = filtered.length + ' logs · ' + periodLabel;
+
+  const grid = document.getElementById('compGrid');
+  grid.innerHTML = '<div style="grid-column:1/-1;padding:30px;text-align:center;color:var(--text-3);font-size:13px;"><div class="spinner" style="margin:0 auto 8px;"></div>Loading dashboards…</div>';
+
+  // Fetch supporting data in parallel: war ranges (working hours),
+  // projects (name lookup), user_badges (per-user earned count), and
+  // employee_leaves (per-user leave days — needed so each employee's
+  // expected-hours bar reflects their personal leave like Employee
+  // Analysis already does). badges/user_badges tables may not yet
+  // exist (Phase 6) — swallow errors so the page still renders.
+  const [warRes, projRes, ubRes, leavesRes] = await Promise.all([
+    db.from('war_day_ranges').select('start_date,end_date').order('start_date'),
+    db.from('projects').select('proj_unique_id, project_name'),
+    db.from('user_badges').select('user_id').then(r => r, () => ({ data: [] })),
+    db.from('employee_leaves').select('user_id, start_date, end_date'),
+  ]);
+  const warRanges = warRes.error ? [] : (warRes.data || []);
+  const projMap = {};
+  (projRes.data || []).forEach(p => { projMap[p.proj_unique_id] = p.project_name; });
+  const badgeCounts = {};
+  (ubRes.data || []).forEach(b => { badgeCounts[b.user_id] = (badgeCounts[b.user_id] || 0) + 1; });
+  // Group leaves by user_id so we can compute per-user expected hours
+  const leavesByUser = {};
+  (leavesRes.data || []).forEach(l => {
+    if (!l.user_id) return;
+    (leavesByUser[l.user_id] = leavesByUser[l.user_id] || []).push({ start_date: l.start_date, end_date: l.end_date });
+  });
+
+  if (!allUsers.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;padding:30px;text-align:center;color:var(--text-3);font-size:13px;">No users to compare yet.</div>';
+    return;
+  }
+
+  // Stash so trend toggle handlers can re-bucket on demand
+  compCharts._filtered    = filtered;
+  compCharts._periodLabel = periodLabel;
+
+  // Build a card per employee. No ranking, no winner highlights.
+  grid.innerHTML = allUsers.map(u => {
+    const logs = filtered.filter(l => l.user_id === u.id);
+    const stats = calculateStats(logs);
+    const ini = u.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2);
+    // Per-user expected hours — accounts for that user's individual leaves.
+    // Matches the Employee Analysis page so the same person shows the same
+    // expected number on both views.
+    const userLeaves = leavesByUser[u.id] || [];
+    const wt = getWorkingDaysInfo(0, userLeaves, warRanges, appStartDate);
+    const hoursPct = wt.expectedHours > 0 ? Math.min(Math.round((stats.totalHours / wt.expectedHours) * 100), 999) : 0;
+    const projIds = [...new Set(logs.map(l => l.linked_project_id).filter(Boolean))];
+    const projNames = projIds.map(pid => projMap[pid] || pid);
+    const badgeCount = badgeCounts[u.id] || 0;
+    const pctColor = hoursPct >= 100 ? 'var(--success)' : hoursPct >= 75 ? 'var(--gold)' : 'var(--warning)';
+
+    const avatarInner = u.avatar_url
+      ? `<img src="${u.avatar_url}" alt="${u.full_name}" onerror="this.outerHTML='${ini}'" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />`
+      : ini;
+    return `
+    <div class="emp-dash-card" data-user-id="${u.id}">
+      <div class="emp-dash-header">
+        <div class="user-avatar" data-user-id="${u.id}" style="width:46px;height:46px;font-size:14px;flex-shrink:0;overflow:hidden;">${avatarInner}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:800;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${u.full_name}</div>
+          <div style="font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-top:2px;">${u.role || 'Employee'}</div>
+        </div>
+      </div>
+
+      <div class="emp-dash-section">
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:6px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;">
+          <span>Hours Worked vs Expected</span>
+          <span style="color:var(--text-1);">${stats.totalHours}h / ${wt.expectedHours}h <strong style="color:${pctColor};margin-left:4px;">${hoursPct}%</strong></span>
+        </div>
+        <div style="height:8px;background:var(--border);border-radius:999px;overflow:hidden;">
+          <div style="height:100%;width:${Math.min(hoursPct, 100)}%;background:var(--text-1);border-radius:999px;"></div>
+        </div>
+      </div>
+
+      <div class="emp-dash-stats">
+        <div class="emp-dash-stat"><div class="v">${stats.totalTasks}</div><div class="l">Tasks</div></div>
+        <div class="emp-dash-stat"><div class="v">${badgeCount}</div><div class="l">🏅 Badges</div></div>
+        <div class="emp-dash-stat"><div class="v">${stats.uniqueDays}</div><div class="l">Active Days</div></div>
+        <div class="emp-dash-stat"><div class="v">${stats.maxDayHours}h</div><div class="l">Peak Day</div></div>
+      </div>
+
+      <div class="emp-dash-section">
+        <div style="font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">📁 Projects Involved (${projNames.length})</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          ${projNames.length
+            ? projNames.slice(0, 8).map(n => `<span style="padding:3px 10px;border-radius:999px;background:var(--bg-surface);border:1px solid var(--border);font-size:11px;font-weight:600;">${n}</span>`).join('')
+              + (projNames.length > 8 ? `<span style="padding:3px 10px;border-radius:999px;background:var(--bg-surface);border:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text-3);">+${projNames.length - 8} more</span>` : '')
+            : '<span style="font-size:11px;color:var(--text-3);">No project-linked tasks</span>'}
+        </div>
+      </div>
+
+      <div class="emp-dash-section">
+        <div class="emp-charts-pair">
+          <div>
+            <div style="font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Performance</div>
+            <div style="position:relative;height:180px;"><canvas id="empRadar-${u.id}"></canvas></div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Category Hours <span style="color:var(--text-3);font-weight:500;text-transform:none;letter-spacing:0;">(click to drill)</span></div>
+            <div style="position:relative;height:180px;"><canvas id="empCat-${u.id}"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="emp-dash-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div style="font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;">Hours Trend</div>
+          <div class="trend-toggle" data-user-id="${u.id}">
+            <button class="trend-btn active" data-mode="monthly">Monthly</button>
+            <button class="trend-btn" data-mode="weekly">Weekly</button>
+            <button class="trend-btn" data-mode="daily">Daily</button>
+          </div>
+        </div>
+        <div style="position:relative;height:160px;"><canvas id="empTrend-${u.id}"></canvas></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Now build the per-card charts.
+  allUsers.forEach(u => {
+    const logs = filtered.filter(l => l.user_id === u.id);
+    const stats = calculateStats(logs);
+    // Per-user expected hours (same calc as the card render block above).
+    const userLeaves = leavesByUser[u.id] || [];
+    const wt = getWorkingDaysInfo(0, userLeaves, warRanges, appStartDate);
+
+    // Radar — normalize per axis using a sensible min-cap so a single low value
+    // doesn't make others look perfect.
+    const radarEl = document.getElementById('empRadar-' + u.id);
+    if (radarEl) {
+      const realVals = [stats.totalHours, stats.totalTasks, stats.maxStreak, stats.accomplishmentCount, stats.uniqueDays, stats.maxDayHours];
+      const labels   = ['Hours','Tasks','Streak','Achieved','Days','Peak'];
+      const units    = ['h','','d','','d','h'];
+      const axisMax  = [Math.max(stats.totalHours, wt.expectedHours || 100), Math.max(stats.totalTasks, 50), Math.max(stats.maxStreak, 14), Math.max(stats.accomplishmentCount, 30), Math.max(stats.uniqueDays, wt.workingDays || 30), Math.max(stats.maxDayHours, 8)];
+      const norm     = realVals.map((v, i) => Math.round(v / axisMax[i] * 100));
+      const themeLine = compChartLine();
+      compCharts['radar-' + u.id] = new Chart(radarEl, {
+        type: 'radar',
+        data: { labels, datasets: [{ label: u.full_name.split(' ')[0], data: norm, borderColor: themeLine.stroke, backgroundColor: themeLine.fill, pointBackgroundColor: themeLine.stroke, borderWidth: 2, pointRadius: 3 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (ctx) => ` ${labels[ctx.dataIndex]}: ${realVals[ctx.dataIndex]}${units[ctx.dataIndex]}` } }
+          },
+          scales: { r: {
+            min: 0, max: 100, ticks: { display: false },
+            // Theme-aware web grid — was rgba(148,163,184,0.15) which
+            // disappeared on the black canvas in dark mode.
+            grid:       { color: document.body.classList.contains('light-mode') ? 'rgba(26,22,18,0.18)' : 'rgba(255,255,255,0.28)' },
+            angleLines: { color: document.body.classList.contains('light-mode') ? 'rgba(26,22,18,0.18)' : 'rgba(255,255,255,0.28)' },
+            pointLabels: { color: document.body.classList.contains('light-mode') ? 'rgba(26,22,18,0.70)' : 'rgba(255,255,255,0.78)', font: { size: 10 } }
+          } }
+        }
+      });
+    }
+
+    // Category hours — drillable. Uses the dynamic categoryHours map so
+    // admin-added categories beyond Support/Testing/Project also appear.
+    const catEl = document.getElementById('empCat-' + u.id);
+    if (catEl) {
+      const cats = Object.keys(stats.categoryHours || {}).sort();
+      const vals = cats.map(c => stats.categoryHours[c]);
+      const palette = ['rgba(59,130,246,.85)','rgba(139,92,246,.85)','rgba(16,185,129,.85)','rgba(245,158,11,.85)','rgba(239,68,68,.85)','rgba(6,182,212,.85)'];
+      const bg = cats.map((_, i) => palette[i % palette.length]);
+      compCharts['cat-' + u.id] = new Chart(catEl, {
+        type: 'bar',
+        data: {
+          labels: cats.length ? cats : ['(no data)'],
+          datasets: [{ label: 'Hours', data: cats.length ? vals : [0], backgroundColor: bg, borderRadius: 4 }]
+        },
+        options: {
+          indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw}h` } }
+          },
+          scales: {
+            x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(148,163,184,0.10)' }, beginAtZero: true },
+            y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { display: false } }
+          },
+          onClick: (evt, els) => {
+            if (!els.length) return;
+            const cat = cats[els[0].index];
+            showDrillDown({ user: u }, cat, compCharts._filtered, compCharts._periodLabel);
+          }
+        }
+      });
+    }
+
+    // Trend — default monthly
+    drawTrend(u.id, logs, 'monthly');
+  });
+
+  // Wire trend mode toggle (Monthly / Weekly / Daily)
+  document.querySelectorAll('.trend-toggle').forEach(tg => {
+    const uid = tg.dataset.userId;
+    tg.querySelectorAll('.trend-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        tg.querySelectorAll('.trend-btn').forEach(b => b.classList.toggle('active', b === btn));
+        const userLogs = compCharts._filtered.filter(l => l.user_id === uid);
+        drawTrend(uid, userLogs, btn.dataset.mode);
+      });
+    });
+  });
+}
+
+function drawTrend(uid, logs, mode) {
+  const el = document.getElementById('empTrend-' + uid);
+  if (!el) return;
+  const key = 'trend-' + uid;
+  if (compCharts[key]) { try { compCharts[key].destroy(); } catch(e){} }
+
+  let buckets;
+  if (mode === 'monthly')      buckets = aggregateByMonth(logs, 6);
+  else if (mode === 'daily')   buckets = aggregateByDay(logs, 14);
+  else                          buckets = aggregateByWeek(logs, 8);
+
+  const themeLine = compChartLine();
+  compCharts[key] = new Chart(el, {
+    type: 'line',
+    data: {
+      labels: buckets.map(b => b.label),
+      datasets: [{
+        label: 'Hours',
+        data: buckets.map(b => Math.round(b.hours * 10) / 10),
+        borderColor: themeLine.stroke,
+        backgroundColor: themeLine.fill,
+        tension: 0.4, fill: true,
+        pointBackgroundColor: themeLine.stroke, pointRadius: 3, borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw}h` } } },
+      scales: {
+        x: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(148,163,184,0.08)' } },
+        y: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(148,163,184,0.08)' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+
+// ── Drill-Down ─────────────────────────────────────────────
+function showDrillDown(userStat, category, filtered, periodLabel) {
+  const logs = filtered.filter(l => l.user_id === userStat.user.id && l.category === category);
+  const section = document.getElementById('drillDownSection');
+  const title   = document.getElementById('drillDownTitle');
+  const body    = document.getElementById('drillDownBody');
+
+  title.textContent = `${category} — ${userStat.user.full_name} (${periodLabel})`;
+
+  if (!logs.length) {
+    body.innerHTML = `<tr><td colspan="5"><div class="empty-state" style="padding:24px;"><div class="empty-icon">📭</div><div class="empty-text">No ${category} logs in this period</div></div></td></tr>`;
+  } else {
+    const totalHours = logs.reduce((s,l)=>s+parseFloat(l.hours_spent||0),0);
+    // Group by sub_category for a mini summary
+    const subcatSummary = {};
+    logs.forEach(l => {
+      const sc = l.sub_category || category;
+      if (!subcatSummary[sc]) subcatSummary[sc] = 0;
+      subcatSummary[sc] += parseFloat(l.hours_spent||0);
+    });
+    const summaryHtml = Object.entries(subcatSummary)
+      .sort((a,b)=>b[1]-a[1])
+      .map(([sc,h])=>`<span style="padding:3px 10px;border-radius:999px;background:var(--bg-surface);border:1px solid var(--border);font-size:11px;font-weight:600;">${sc}: ${h.toFixed(1)}h</span>`)
+      .join('');
+
+    body.innerHTML = `
+      <tr><td colspan="5" style="padding:10px 16px;background:var(--bg-surface);border-bottom:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <span style="font-size:12px;font-weight:700;">${logs.length} entries · ${totalHours.toFixed(1)}h total</span>
+          ${summaryHtml}
+        </div>
+      </td></tr>
+      ${logs.sort((a,b)=>b.log_date.localeCompare(a.log_date)).map(l=>`
+        <tr>
+          <td class="td-sm">${formatDate(l.log_date)}</td>
+          <td>${truncate(l.task_project,40)}</td>
+          <td><span style="font-size:12px;color:var(--text-2);">${l.sub_category||'—'}</span></td>
+          <td><strong>${safeNum(l.hours_spent, 1)}h</strong></td>
+          <td class="td-sm td-muted">${l.accomplishment_status === 'pending' ? '<span style="color:var(--warning);font-weight:700;">🕒 Pending</span> ' : ''}${truncate(l.accomplishment,45)}</td>
+        </tr>`).join('')}`;
+  }
+
+  section.style.display = 'block';
+  section.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function closeDrillDown() {
+  document.getElementById('drillDownSection').style.display = 'none';
+}
+
+// ── Export Tab ─────────────────────────────────────────────
+function setupExportSelects() {
+  const exportUserSel = document.getElementById('exportUserSel');
+  if (exportUserSel) {
+    exportUserSel.innerHTML = '<option value="">Select Member</option>';
+    allUsers.forEach(u => { const o = new Option(u.full_name, u.id); exportUserSel.appendChild(o); });
+  }
+}
+
+function mapLogForExport(l) {
+  const user = allUsers.find(u => u.id === l.user_id);
+  return {
+    date: l.log_date, week: l.week_number, month: l.month,
+    team_member: l.team_member || user?.full_name || '',
+    task_project: l.task_project, description: l.task_description,
+    category: l.category, sub_category: l.sub_category || '', hours_spent: l.hours_spent,
+    accomplishment: l.accomplishment,
+    accomplishment_status: l.accomplishment_status || 'approved',
+    rejection_reason: l.rejection_reason || '',
+    notes: l.comments_notes,
+    is_completed: l.is_completed ? 'Yes' : 'No',
+    linked_project_id: l.linked_project_id || '',
+  };
+}
+
+function exportAllCSV() {
+  exportToCSV(allLogs.map(mapLogForExport), `worktracker_all_logs_${new Date().toISOString().slice(0,10)}.csv`);
+  showToast('Exported all logs!', 'success');
+}
+
+function exportSelectedUserCSV() {
+  const uid = document.getElementById('exportUserSel').value;
+  if (!uid) { showToast('Please select a user first', 'warning'); return; }
+  const user = allUsers.find(u => u.id === uid);
+  const logs = allLogs.filter(l => l.user_id === uid).map(mapLogForExport);
+  exportToCSV(logs, `${user.username}_logs_${new Date().toISOString().slice(0,10)}.csv`);
+  showToast(`Exported ${user.full_name}'s logs!`, 'success');
+}
+
+function exportMonthCSV() {
+  const month = document.getElementById('exportMonthSel').value;
+  const logs  = (month ? allLogs.filter(l => l.month === month) : allLogs).map(mapLogForExport);
+  exportToCSV(logs, `worktracker_${month || 'all'}_${new Date().toISOString().slice(0,10)}.csv`);
+  showToast('Exported month logs!', 'success');
+}
+
+// ── Admin Edit Modal ───────────────────────────────────────
+function openAdminEdit(id) {
+  const log = allLogs.find(l => l.id === id);
+  if (!log) return;
+  adminEditId = id;
+  document.getElementById('aeDate').value     = log.log_date;
+  document.getElementById('aeMember').value   = log.team_member;
+  document.getElementById('aeTask').value     = log.task_project;
+  document.getElementById('aeDesc').value     = log.task_description;
+  document.getElementById('aeCategory').value = log.category;
+  document.getElementById('aeHours').value    = log.hours_spent;
+  document.getElementById('aeAccomp').value       = log.accomplishment;
+  document.getElementById('aeNotes').value        = log.comments_notes;
+  document.getElementById('aeSubCat').value       = log.sub_category || '';
+  document.getElementById('aeIsCompleted').checked = !!log.is_completed;
+  document.getElementById('adminEditModal').classList.add('open');
+}
+function closeAdminEdit() { document.getElementById('adminEditModal').classList.remove('open'); adminEditId = null; }
+
+async function saveAdminEdit() {
+  if (!adminEditId) return;
+  const dateVal = document.getElementById('aeDate').value;
+  const updates = {
+    team_member:      document.getElementById('aeMember').value.trim(),
+    log_date:         dateVal,
+    month:            getMonthName(dateVal),
+    week_number:      getWeekNumber(dateVal),
+    task_project:     document.getElementById('aeTask').value.trim(),
+    task_description: document.getElementById('aeDesc').value.trim(),
+    category:         document.getElementById('aeCategory').value,
+    sub_category:     document.getElementById('aeSubCat').value.trim(),
+    is_completed:     document.getElementById('aeIsCompleted').checked,
+    hours_spent:      parseFloat(document.getElementById('aeHours').value),
+    accomplishment:   document.getElementById('aeAccomp').value.trim(),
+    comments_notes:   document.getElementById('aeNotes').value.trim(),
+    // Admin edit implies admin approval — auto-mark approved.
+    accomplishment_status: 'approved',
+    approved_by: session.id,
+    approved_at: new Date().toISOString(),
+    rejection_reason: null,
+  };
+  const { error } = await db.from('task_logs').update(updates).eq('id', adminEditId);
+  if (error) { showToast('Failed to save: ' + error.message, 'error'); }
+  else {
+    showToast('Record updated!', 'success');
+    closeAdminEdit();
+    await loadAllLogs();
+    renderUserList();
+    renderRecordsTable();
+    renderComparison();
+    if (selectedUserId) viewUser(selectedUserId);
+  }
+}
+
+// ── Employee Analysis Tab ──────────────────────────────────
+// Per-employee selection state lives in module scope so re-renders
+// (e.g. user CRUD) don't lose the active employee.
+let _analysisActiveUid = null;
+// Module-scope caches — war_day_ranges almost never changes during a
+// session, employee_leaves change only when admin edits the leave list
+// (already invalidated there). Skip the round-trips on every employee
+// switch by reusing the cached arrays.
+let _warRangesCache = null;
+let _leavesCache = null;
+async function getWarRangesCached() {
+  if (_warRangesCache) return _warRangesCache;
+  const { data } = await db.from('war_day_ranges').select('start_date,end_date').order('start_date');
+  _warRangesCache = data || [];
+  return _warRangesCache;
+}
+async function getLeavesCached() {
+  if (_leavesCache) return _leavesCache;
+  const { data } = await db.from('employee_leaves').select('user_id, start_date, end_date');
+  _leavesCache = data || [];
+  return _leavesCache;
+}
+function invalidateWorkingTimeCaches() { _warRangesCache = null; _leavesCache = null; }
+
+async function initAnalysisTab() {
+  // Render the employee button strip — buttons reflect allUsers, which
+  // is repopulated whenever an admin creates or deletes a user.
+  const host = document.getElementById('analysisUserButtons');
+  if (!host) return;
+  if (!allUsers.length) {
+    host.innerHTML = '<div style="font-size:12px;color:var(--text-3);">No employees yet.</div>';
+    return;
+  }
+  // If the previously-active uid was deleted, drop it.
+  if (_analysisActiveUid && !allUsers.find(u => u.id === _analysisActiveUid)) {
+    _analysisActiveUid = null;
+    document.getElementById('analysisContent').innerHTML = `<div class="empty-state"><div class="empty-icon">🔬</div><div class="empty-text">Pick an employee above</div></div>`;
+  }
+  host.innerHTML = allUsers.map(u => {
+    const ini = u.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2);
+    const av = u.avatar_url
+      ? `<img src="${u.avatar_url}" alt="" onerror="this.outerHTML='${ini}'" />`
+      : ini;
+    const active = _analysisActiveUid === u.id ? ' active' : '';
+    return `<button class="ana-user-btn${active}" data-uid="${u.id}" onclick="loadEmployeeAnalysis('${u.id}')"><span class="av">${av}</span>${u.full_name}</button>`;
+  }).join('');
+}
+
+async function loadEmployeeAnalysis(uid) {
+  // Backwards-compat: callers that still pass nothing fall back to the
+  // previously-active selection (no-op if none).
+  uid = uid || _analysisActiveUid;
+  if (!uid) return;
+  _analysisActiveUid = uid;
+  // Update the active visual on the button strip
+  document.querySelectorAll('.ana-user-btn').forEach(b => b.classList.toggle('active', b.dataset.uid === uid));
+
+  const container = document.getElementById('analysisContent');
+  container.innerHTML = `<div class="loading" style="margin:40px auto;flex-direction:column;gap:12px;"><div class="spinner" style="width:32px;height:32px;border-width:3px;"></div><span style="color:var(--text-3)">Loading analysis…</span></div>`;
+
+  const user = allUsers.find(u => u.id === uid);
+  if (!user) { container.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">Employee not found</div></div>`; return; }
+
+  // Use the in-memory allLogs (loaded at admin init / refreshed on CRUD)
+  // instead of refetching the per-user task_logs every switch. Employee
+  // analysis switching used to trigger 3 RTTs every click; now it's 0
+  // RTTs in the common case (caches warm, badges fall back to existing
+  // user_badges rows).
+  const logs = allLogs
+    .filter(l => l.user_id === uid)
+    .sort((a, b) => (a.log_date || '').localeCompare(b.log_date || ''));
+  const [warRanges, allLeaves] = await Promise.all([getWarRangesCached(), getLeavesCached()]);
+  const leaves    = allLeaves.filter(l => l.user_id === uid).map(l => ({ start_date: l.start_date, end_date: l.end_date }));
+  const wt        = getWorkingDaysInfo(0, leaves, warRanges, appStartDate);
+  const stats     = calculateStats(logs);
+  // Render the analysis with the badges already known from cache (or empty).
+  // Then trigger syncUserBadges in the background so newly-earned badges
+  // show up after a tick without making the user wait.
+  const { badges: activeBadges, earned: earnedSet } = await fetchUserBadges(uid);
+  const badges    = activeBadges.map(b => ({ ...b, earned: earnedSet.has(b.id) }));
+  syncUserBadges(uid, stats).then(() => { /* fire-and-forget; UI may show new badges on next tab visit */ }).catch(() => {});
+  const earnedCount = badges.filter(b => b.earned).length;
+  const initials  = user.full_name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+  const heroInner = user.avatar_url
+    ? `<img src="${user.avatar_url}" alt="${user.full_name}" onerror="this.outerHTML='${initials}'" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />`
+    : initials;
+  const daysEq    = convertHoursToDays(logs);
+  const hoursPct  = wt.expectedHours > 0 ? Math.min(Math.round((stats.totalHours/wt.expectedHours)*100),999) : 0;
+  const attendPct = wt.workingDays > 0 ? Math.min(Math.round((stats.uniqueDays/wt.workingDays)*100),100) : 0;
+
+  // Team averages
+  const teamStats = allUsers.map(u => {
+    const ul = allLogs.filter(l => l.user_id === u.id);
+    return calculateStats(ul);
+  });
+  const avg = (key) => teamStats.length ? Math.round((teamStats.reduce((s,ts)=>s+ts[key],0)/teamStats.length)*10)/10 : 0;
+
+  const weekData = aggregateByWeek(logs, 10);
+  const thisMonth = getMonthName(new Date());
+  const monthLogs = logs.filter(l => l.month === thisMonth);
+
+  document.getElementById('analysisPeriodInfo').textContent =
+    `${wt.periodLabel} · ${wt.workingDays} working days · ${wt.leaveDays} leave days${wt.warDaysOff > 0 ? ` · ${wt.warDaysOff} war day${wt.warDaysOff === 1 ? '' : 's'}` : ''}`;
+
+  container.innerHTML = `
+    <!-- Hero -->
+    <div class="perf-hero" style="margin-bottom:20px;">
+      <div class="hero-avatar" data-user-id="${user.id}" style="border-color:rgba(255,255,255,0.2);background:linear-gradient(135deg,rgba(255,255,255,0.12),rgba(255,255,255,0.04));overflow:hidden;">${heroInner}</div>
+      <div class="hero-info">
+        <div class="hero-name">${user.full_name}</div>
+        <div class="hero-meta">@${user.username} · 🏅 ${earnedCount}/${badges.length} badges</div>
+      </div>
+    </div>
+
+    <!-- Working time banner — uses the shared .wta-banner class in
+         style.css which already has both dark + light theme treatments,
+         so the text stays readable when the user toggles themes. -->
+    <div class="wta-banner" style="font-size:13px;color:var(--text-2);">
+      📅 <strong style="color:var(--text-1)">${wt.periodLabel}</strong> &nbsp;·&nbsp;
+      ${wt.workingDays} working days &nbsp;·&nbsp;
+      ${wt.leaveDays} leave days excluded &nbsp;·&nbsp;
+      ${wt.holidayCount} public holidays &nbsp;·&nbsp;
+      ${wt.warDaysOff > 0 ? `${wt.warDaysOff} war day${wt.warDaysOff === 1 ? '' : 's'} off &nbsp;·&nbsp;` : ''}
+      Expected: <strong style="color:var(--text-1)">${wt.expectedHours}h</strong>
+    </div>
+
+    <!-- KPI cards -->
+    <div class="kpi-grid" style="margin-bottom:20px;">
+      <div class="kpi-card accent-purple"><span class="kpi-icon">⏱️</span><div class="kpi-label">Total Hours</div><div class="kpi-value">${stats.totalHours}h</div><div class="kpi-sub">Expected: ${wt.expectedHours}h</div></div>
+      <div class="kpi-card accent-gold"><span class="kpi-icon">📋</span><div class="kpi-label">Total Tasks</div><div class="kpi-value">${stats.totalTasks}</div><div class="kpi-sub">${thisMonth}: ${monthLogs.length}</div></div>
+      <div class="kpi-card accent-blue"><span class="kpi-icon">📅</span><div class="kpi-label">Days Active</div><div class="kpi-value">${stats.uniqueDays}</div><div class="kpi-sub">of ${wt.workingDays} working days</div></div>
+      <div class="kpi-card accent-green"><span class="kpi-icon">🎯</span><div class="kpi-label">Hours Completion</div><div class="kpi-value">${hoursPct}%</div><div class="kpi-sub">${stats.totalHours}h / ${wt.expectedHours}h</div></div>
+      <div class="kpi-card accent-red"><span class="kpi-icon">⚡</span><div class="kpi-label">Peak Day</div><div class="kpi-value">${stats.maxDayHours}h</div><div class="kpi-sub">${daysEq}d equivalent</div></div>
+      <div class="kpi-card accent-green"><span class="kpi-icon">✅</span><div class="kpi-label">Completed Tasks</div><div class="kpi-value">${getCompletedCount(logs)}</div><div class="kpi-sub">Marked as completed</div></div>
+    </div>
+
+    <!-- Team comparison bars -->
+    <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">📊 vs Team Average</div>
+    <div class="card" style="margin-bottom:20px;padding:20px;">
+      ${[
+        { label:'Total Hours',     val:stats.totalHours,         avg:avg('totalHours'),         unit:'h', color:'#6366f1' },
+        { label:'Total Tasks',     val:stats.totalTasks,         avg:avg('totalTasks'),          unit:'',  color:'#10b981' },
+        { label:'Days Active',     val:stats.uniqueDays,         avg:avg('uniqueDays'),          unit:'d', color:'#f59e0b' },
+        { label:'Best Streak',     val:stats.maxStreak,          avg:avg('maxStreak'),           unit:'d', color:'#ef4444' },
+        { label:'Achievements',    val:stats.accomplishmentCount,avg:avg('accomplishmentCount'), unit:'',  color:'#8b5cf6' },
+        { label:'Support Hours',   val:stats.supportHours,       avg:avg('supportHours'),        unit:'h', color:'#3b82f6' },
+        { label:'Testing Hours',   val:stats.testingHours,       avg:avg('testingHours'),        unit:'h', color:'#8b5cf6' },
+        { label:'Project Hours',   val:stats.projectHours,       avg:avg('projectHours'),        unit:'h', color:'#10b981' },
+        { label:'Completed Tasks', val:getCompletedCount(logs), avg:(()=>{const t=allLogs.filter(l=>!!l.is_completed).length; return allUsers.length?Math.round(t/allUsers.length*10)/10:0;})(), unit:'', color:'#059669' },
+      ].map(m => {
+        const maxV  = Math.max(m.val, m.avg, 1);
+        const empPct = Math.round(m.val/maxV*100);
+        const avgPct = Math.round(m.avg/maxV*100);
+        const better = m.val >= m.avg;
+        return `<div style="margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+            <span style="font-weight:600;">${m.label}</span>
+            <span><span style="color:${m.color};font-weight:700;">${m.val}${m.unit}</span> <span style="color:var(--text-3);">vs avg ${m.avg}${m.unit}</span> <span style="color:${better?'var(--success)':'var(--warning)'};">${better?'▲':'▼'}</span></span>
+          </div>
+          <div style="position:relative;height:8px;background:var(--border);border-radius:999px;overflow:visible;margin-bottom:2px;">
+            <div style="height:100%;width:${empPct}%;background:${m.color};border-radius:999px;transition:width .8s;"></div>
+          </div>
+          <div style="position:relative;height:4px;background:var(--border);border-radius:999px;overflow:visible;">
+            <div style="height:100%;width:${avgPct}%;background:var(--text-3);border-radius:999px;opacity:.5;"></div>
+          </div>
+          <div style="display:flex;gap:12px;font-size:10px;color:var(--text-3);margin-top:2px;">
+            <span style="color:${m.color};">■ This employee</span><span>■ Team average</span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-grid" style="margin-bottom:20px;">
+      <div class="chart-card"><div class="card-title">📈 Weekly Hours</div><div class="chart-container"><canvas id="analysisWeeklyChart"></canvas></div></div>
+      <div class="chart-card"><div class="card-title">🍩 Category Split</div><div class="chart-container"><canvas id="analysisCatChart"></canvas></div></div>
+    </div>
+
+    <!-- Approved achievements (logged accomplishments) -->
+    ${(() => {
+      const approved = logs
+        .filter(l => l.accomplishment && l.accomplishment.trim() && (!l.accomplishment_status || l.accomplishment_status === 'approved'))
+        .sort((a,b) => b.log_date.localeCompare(a.log_date));
+      return `
+        <div class="card" style="margin-bottom:20px;">
+          <div class="card-title-lg">🏆 Approved Achievements <span style="font-size:13px;color:var(--text-3);font-weight:400;">(${approved.length})</span></div>
+          ${approved.length === 0
+            ? '<div style="font-size:12px;color:var(--text-3);padding:14px;background:var(--bg-surface);border:1px dashed var(--border);border-radius:var(--radius-lg);">No approved achievements yet for this employee.</div>'
+            : `<div style="display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;">
+                ${approved.map(l => `
+                  <div style="padding:10px 14px;background:var(--bg-surface);border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:var(--radius);">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
+                      <span style="font-size:11px;color:var(--text-3);font-weight:600;">📅 ${formatDate(l.log_date)}</span>
+                      <span style="font-size:11px;color:var(--text-3);">📋 ${l.task_project || '—'}</span>
+                      ${categoryBadge(l.category)}
+                    </div>
+                    <div style="font-size:13px;color:var(--text-1);line-height:1.4;">"${l.accomplishment}"</div>
+                  </div>`).join('')}
+              </div>`}
+        </div>`;
+    })()}
+
+    <!-- Badges -->
+    <div class="card">
+      <div class="card-title-lg">🏅 Badges (${earnedCount}/${badges.length})</div>
+      <div class="badges-grid">
+        ${badges.map(b=>`<div class="badge-card ${b.earned?'earned':'locked'}"><span class="badge-emoji">${b.icon}</span><span class="badge-name">${b.name}</span><span class="badge-desc">${b.desc}</span>${b.earned?'<span style="font-size:10px;color:var(--gold);font-weight:700;">EARNED ✨</span>':''}</div>`).join('')}
+      </div>
+    </div>
+  `;
+
+  // Charts
+  requestAnimationFrame(() => {
+    const base = { responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#94a3b8',font:{size:11}}}},
+      scales:{x:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e293b'}},y:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e293b'},beginAtZero:true}} };
+
+    const wCtx = document.getElementById('analysisWeeklyChart');
+    if (wCtx) new Chart(wCtx,{type:'line',data:{labels:weekData.map(w=>w.label),datasets:[{label:'Hours',data:weekData.map(w=>Math.round(w.hours*10)/10),borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,0.1)',fill:true,tension:.4,pointBackgroundColor:'#6366f1',pointRadius:4,borderWidth:2}]},options:base});
+
+    const cCtx = document.getElementById('analysisCatChart');
+    if (cCtx && stats.totalTasks>0) {
+      const catNames = ['Support','Testing','Project'];
+      new Chart(cCtx, {
+        type:'doughnut',
+        data:{
+          labels: catNames,
+          datasets:[{data:[stats.supportCount,stats.testingCount,stats.projectCount],
+            backgroundColor:['rgba(59,130,246,.8)','rgba(139,92,246,.8)','rgba(16,185,129,.8)'],
+            borderColor:['#3b82f6','#8b5cf6','#10b981'],borderWidth:2,hoverOffset:6}]
+        },
+        options:{
+          ...base, cutout:'65%', scales:{},
+          plugins:{...base.plugins,legend:{...base.plugins.legend,position:'bottom'},
+            tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw} tasks`}}
+          },
+          onClick:(evt,elements)=>{
+            if (!elements.length) return;
+            const cat = catNames[elements[0].index];
+            const catLogs = logs.filter(l=>l.category===cat);
+            // Render drill-down table
+            let drillEl = document.getElementById('analysisCatDrill');
+            if (!drillEl) {
+              drillEl = document.createElement('div');
+              drillEl.id = 'analysisCatDrill';
+              drillEl.style.marginTop = '16px';
+              cCtx.closest('.chart-card').appendChild(drillEl);
+            }
+            if (!catLogs.length) { drillEl.innerHTML=`<div style="font-size:12px;color:var(--text-3);padding:8px;">No ${cat} logs.</div>`; return; }
+            drillEl.innerHTML = `
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                <span style="font-size:12px;font-weight:700;">${cat} — ${catLogs.length} entries, ${catLogs.reduce((s,l)=>s+parseFloat(l.hours_spent||0),0).toFixed(1)}h</span>
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('analysisCatDrill').innerHTML=''">✕</button>
+              </div>
+              <div class="table-wrapper">
+                <table><thead><tr><th>Date</th><th>Task</th><th>Sub-Cat</th><th>Hours</th><th>Done</th></tr></thead>
+                <tbody>
+                  ${catLogs.sort((a,b)=>b.log_date.localeCompare(a.log_date)).map(l=>`
+                    <tr>
+                      <td class="td-sm">${formatDate(l.log_date)}</td>
+                      <td>${truncate(l.task_project,35)}</td>
+                      <td style="font-size:11px;color:var(--text-3);">${l.sub_category||'—'}</td>
+                      <td><strong>${safeNum(l.hours_spent, 1)}h</strong></td>
+                      <td>${l.is_completed?'<span class="completed-badge">✅</span>':'—'}</td>
+                    </tr>`).join('')}
+                </tbody></table>
+              </div>`;
+            drillEl.scrollIntoView({behavior:'smooth',block:'nearest'});
+          }
+        }
+      });
+    }
+  });
+}
+
+// ── Export Tab ──────────────────────────────────────────────
+let exportSubcats = {};
+
+async function initExportTab() {
+  // Populate user filter
+  const exportUserSel = document.getElementById('exportUserSel');
+  if (exportUserSel && exportUserSel.options.length <= 1) {
+    allUsers.forEach(u => {
+      const o = new Option(u.full_name, u.id);
+      exportUserSel.appendChild(o);
+    });
+  }
+  // Populate month filter
+  const exportMonthSel = document.getElementById('exportMonthSel');
+  if (exportMonthSel && exportMonthSel.options.length <= 1) {
+    const months = [...new Set(allLogs.map(l => l.month))].sort((a,b) => {
+      const mo = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      return mo.indexOf(a) - mo.indexOf(b);
+    });
+    months.forEach(m => exportMonthSel.appendChild(new Option(m, m)));
+  }
+  // Load subcats for subcat filter (admin-managed categories)
+  const cats = await loadCategories();
+  exportSubcats = {};
+  cats.forEach(c => { exportSubcats[c.name] = (c.subcategories || []).map(s => s.name); });
+  updateExportCount();
+}
+
+
+
+function onExportCatChange() {
+  const cat = document.getElementById('exportCatSel').value;
+  const sel = document.getElementById('exportSubcatSel');
+  sel.innerHTML = '<option value="">All Sub-Categories</option>';
+  (exportSubcats[cat]||[]).forEach(n => sel.appendChild(new Option(n,n)));
+  updateExportCount();
+}
+
+function getExportFiltered() {
+  const uid    = document.getElementById('exportUserSel').value;
+  const cat    = document.getElementById('exportCatSel').value;
+  const subcat = document.getElementById('exportSubcatSel').value;
+  const month  = document.getElementById('exportMonthSel').value;
+  const from   = document.getElementById('exportDateFrom').value;
+  const to     = document.getElementById('exportDateTo').value;
+  return allLogs.filter(l => {
+    if (uid    && l.user_id      !== uid)    return false;
+    if (cat    && l.category     !== cat)    return false;
+    if (subcat && l.sub_category !== subcat) return false;
+    if (month  && l.month        !== month)  return false;
+    if (from   && l.log_date     < from)     return false;
+    if (to     && l.log_date     > to)       return false;
+    return true;
+  });
+}
+
+function updateExportCount() {
+  const f = getExportFiltered();
+  const el = document.getElementById('exportPreviewCount');
+  if (el) el.textContent = `${f.length} records match current filters`;
+}
+
+['exportUserSel','exportCatSel','exportSubcatSel','exportMonthSel','exportDateFrom','exportDateTo'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', updateExportCount);
+});
+
+function clearExportFilters() {
+  ['exportUserSel','exportCatSel','exportSubcatSel','exportMonthSel'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  ['exportDateFrom','exportDateTo'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('exportSubcatSel').innerHTML = '<option value="">All Sub-Categories</option>';
+  updateExportCount();
+}
+
+function exportFiltered() {
+  const data = getExportFiltered().map(mapLogForExport);
+  if (!data.length) { showToast('No records match your filters', 'warning'); return; }
+  const parts = [];
+  const uid = document.getElementById('exportUserSel').value;
+  if (uid) { const u = allUsers.find(x=>x.id===uid); if (u) parts.push(u.username); }
+  const cat = document.getElementById('exportCatSel').value; if (cat) parts.push(cat.toLowerCase());
+  const month = document.getElementById('exportMonthSel').value; if (month) parts.push(month.toLowerCase());
+  const fname = `worktracker_${parts.join('_')||'filtered'}_${new Date().toISOString().slice(0,10)}.csv`;
+  exportToCSV(data, fname);
+  showToast(`Exported ${data.length} records`, 'success');
+}
+
+// ── Task share donut click ──────────────────────────────────
+document.getElementById('deleteUserModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeDeleteUserModal(); });
+document.getElementById('resetPassModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeResetPassModal(); });
+document.getElementById('adminEditModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeAdminEdit(); });
+
+// ── Save project link mandatory setting ────────────────────────
+async function saveProjectLinkMandatory(checked) {
+  const { error } = await db.from('app_settings')
+    .update({ value: checked ? 'true' : 'false' })
+    .eq('key', 'project_link_mandatory');
+  if (error) showToast('Failed to save setting: ' + error.message, 'error');
+  else showToast(checked ? '✅ Project link is now mandatory' : 'Project link is now optional', 'success');
+}
+
+// ── Project Analytics ───────────────────────────────────────────
+// Chart instances cached so we can destroy before re-render
+let projAnalyticsCharts = { byProject: null, involvement: null };
+// Full log dataset kept in memory for drill-down
+let projAnalyticsLogs = [];
+let projAnalyticsProjMap = {};
+
+async function loadProjectAnalytics() {
+  const summaryEl = document.getElementById('projAnalyticsSummary');
+  const byProjWrap = document.getElementById('projByProjectChartWrap');
+  const byEmpWrap  = document.getElementById('projByEmployeeChartWrap');
+  if (!summaryEl) return;
+
+  summaryEl.innerHTML = '<div class="loading"><div class="spinner"></div> Loading…</div>';
+  byProjWrap.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  byEmpWrap.innerHTML  = '<div class="loading"><div class="spinner"></div></div>';
+
+  // Fetch all task_logs with a linked_project_id + projects for name lookup
+  const [{ data: logs }, { data: projects }] = await Promise.all([
+    db.from('task_logs')
+      .select('id, user_id, team_member, hours_spent, log_date, task_project, task_description, linked_project_id, profiles!user_id(full_name)')
+      .not('linked_project_id', 'is', null),
+    db.from('projects')
+      .select('proj_unique_id, project_name, project_number')
+      .order('project_number'),
+  ]);
+
+  projAnalyticsProjMap = {};
+  (projects || []).forEach(p => { projAnalyticsProjMap[p.proj_unique_id] = p.project_name; });
+  projAnalyticsLogs = logs || [];
+
+  // ── Summary cards ─────────────────────────────────────────
+  const totalHours      = projAnalyticsLogs.reduce((s, l) => s + parseFloat(l.hours_spent || 0), 0);
+  const linkedProjects  = [...new Set(projAnalyticsLogs.map(l => l.linked_project_id))].length;
+  const linkedEmployees = [...new Set(projAnalyticsLogs.map(l => l.user_id))].length;
+  summaryEl.innerHTML = [
+    { label: 'Total Hours Logged',  value: totalHours.toFixed(1) + 'h', icon: '⏱️' },
+    { label: 'Projects with Logs',  value: linkedProjects,               icon: '📁' },
+    { label: 'Employees Involved',  value: linkedEmployees,              icon: '👥' },
+    { label: 'Total Task Entries',  value: projAnalyticsLogs.length,     icon: '📋' },
+  ].map(c => `
+    <div style="background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:16px;">
+      <div style="font-size:22px;margin-bottom:6px;">${c.icon}</div>
+      <div style="font-size:22px;font-weight:800;color:var(--text-1);">${c.value}</div>
+      <div style="font-size:11px;color:var(--text-3);margin-top:2px;">${c.label}</div>
+    </div>`).join('');
+
+  if (!projAnalyticsLogs.length) {
+    byProjWrap.innerHTML = '<div style="padding:20px;color:var(--text-3);font-size:13px;text-align:center;">No linked task logs yet. Employees need to select a project when logging tasks.</div>';
+    byEmpWrap.innerHTML  = '<div style="padding:20px;color:var(--text-3);font-size:13px;text-align:center;">No data yet.</div>';
+    return;
+  }
+
+  // ── Chart 1: Hours by Project (horizontal bars) ──────────
+  const byProj = {};
+  projAnalyticsLogs.forEach(l => {
+    const pid = l.linked_project_id;
+    if (!byProj[pid]) byProj[pid] = { pid, name: projAnalyticsProjMap[pid] || pid, hours: 0 };
+    byProj[pid].hours += parseFloat(l.hours_spent || 0);
+  });
+  const projBars = Object.values(byProj).sort((a, b) => b.hours - a.hours);
+
+  byProjWrap.innerHTML = `<canvas id="hoursByProjectChart" style="max-height:${Math.max(240, projBars.length * 34)}px;"></canvas>`;
+  const ctx1 = document.getElementById('hoursByProjectChart').getContext('2d');
+
+  if (projAnalyticsCharts.byProject) projAnalyticsCharts.byProject.destroy();
+  projAnalyticsCharts.byProject = new Chart(ctx1, {
+    type: 'bar',
+    data: {
+      labels: projBars.map(p => p.name.length > 40 ? p.name.slice(0, 37) + '…' : p.name),
+      datasets: [{
+        label: 'Hours',
+        data:  projBars.map(p => Math.round(p.hours * 10) / 10),
+        backgroundColor: projBars.map((_, i) => CHART_COLORS[i % CHART_COLORS.length] + 'cc'),
+        borderColor:     projBars.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+        borderWidth: 1,
+        borderRadius: 6,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      onClick: (_e, elements) => {
+        if (!elements.length) return;
+        const idx = elements[0].index;
+        const proj = projBars[idx];
+        openProjAnalyticsDrill({
+          title: `📁 ${proj.name}`,
+          subtitle: `${proj.hours.toFixed(1)} hours total`,
+          logs: projAnalyticsLogs.filter(l => l.linked_project_id === proj.pid),
+        });
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.parsed.x} h`,
+          },
+        },
+      },
+      scales: {
+        x: { beginAtZero: true, ticks: { color: 'rgba(148,163,184,0.8)' }, grid: { color: 'rgba(148,163,184,0.1)' }, title: { display: true, text: 'Hours', color: 'rgba(148,163,184,0.8)' } },
+        y: { ticks: { color: 'rgba(148,163,184,0.8)', font: { size: 11 } }, grid: { display: false } },
+      },
+    },
+  });
+
+  // ── Chart 2: Employee Involvement by Project (stacked bars) ──
+  // X axis: projects; each bar = stack of employee contributions
+  const empSet = new Set();
+  projAnalyticsLogs.forEach(l => empSet.add(l.profiles?.full_name || l.team_member || l.user_id));
+  const employees = [...empSet].sort();
+  const projectKeys = projBars.map(p => p.pid);
+
+  // employee × project matrix
+  const matrix = {};  // matrix[empName][projId] = { hours, userId }
+  employees.forEach(e => { matrix[e] = {}; projectKeys.forEach(pid => matrix[e][pid] = { hours: 0, userId: null }); });
+  projAnalyticsLogs.forEach(l => {
+    const emp = l.profiles?.full_name || l.team_member || l.user_id;
+    if (!matrix[emp]) return;
+    if (!matrix[emp][l.linked_project_id]) matrix[emp][l.linked_project_id] = { hours: 0, userId: l.user_id };
+    matrix[emp][l.linked_project_id].hours += parseFloat(l.hours_spent || 0);
+    matrix[emp][l.linked_project_id].userId = l.user_id;
+  });
+
+  byEmpWrap.innerHTML = `<canvas id="involvementChart" style="max-height:${Math.max(280, projectKeys.length * 44)}px;"></canvas>`;
+  const ctx2 = document.getElementById('involvementChart').getContext('2d');
+
+  if (projAnalyticsCharts.involvement) projAnalyticsCharts.involvement.destroy();
+  projAnalyticsCharts.involvement = new Chart(ctx2, {
+    type: 'bar',
+    data: {
+      labels: projBars.map(p => p.name.length > 40 ? p.name.slice(0, 37) + '…' : p.name),
+      datasets: employees.map((emp, i) => ({
+        label: emp,
+        data:  projectKeys.map(pid => Math.round((matrix[emp][pid]?.hours || 0) * 10) / 10),
+        backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + 'cc',
+        borderColor:     CHART_COLORS[i % CHART_COLORS.length],
+        borderWidth: 1,
+        borderRadius: 4,
+      })),
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      onClick: (_e, elements) => {
+        if (!elements.length) return;
+        const el = elements[0];
+        const emp = employees[el.datasetIndex];
+        const pid = projectKeys[el.index];
+        const projName = projAnalyticsProjMap[pid] || pid;
+        const drillLogs = projAnalyticsLogs.filter(l =>
+          l.linked_project_id === pid &&
+          (l.profiles?.full_name || l.team_member || l.user_id) === emp
+        );
+        const drillHours = drillLogs.reduce((s, l) => s + parseFloat(l.hours_spent || 0), 0);
+        openProjAnalyticsDrill({
+          title: `👤 ${emp} on ${projName}`,
+          subtitle: `${drillHours.toFixed(1)} hours · ${drillLogs.length} log entries`,
+          logs: drillLogs,
+        });
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { color: 'rgba(148,163,184,0.9)', boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.x} h`,
+          },
+        },
+      },
+      scales: {
+        x: { stacked: true, beginAtZero: true, ticks: { color: 'rgba(148,163,184,0.8)' }, grid: { color: 'rgba(148,163,184,0.1)' }, title: { display: true, text: 'Hours', color: 'rgba(148,163,184,0.8)' } },
+        y: { stacked: true, ticks: { color: 'rgba(148,163,184,0.8)', font: { size: 11 } }, grid: { display: false } },
+      },
+    },
+  });
+}
+
+// Palette for charts above (reuse if defined elsewhere)
+const CHART_COLORS = [
+  '#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+  '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#84cc16',
+  '#a855f7', '#3b82f6',
+];
+
+// ── Drill-down modal for project analytics ────────────────
+function openProjAnalyticsDrill({ title, subtitle, logs }) {
+  const modal = document.getElementById('projDrillModal');
+  document.getElementById('projDrillTitle').textContent = title;
+  document.getElementById('projDrillSubtitle').textContent = subtitle;
+
+  const body = document.getElementById('projDrillBody');
+  if (!logs.length) {
+    body.innerHTML = '<div style="padding:20px;color:var(--text-3);font-size:13px;text-align:center;">No logs.</div>';
+  } else {
+    const sorted = [...logs].sort((a, b) => (a.log_date < b.log_date ? 1 : -1));
+    body.innerHTML = `
+      <table><thead><tr>
+        <th>Date</th><th>Employee</th><th>Task</th><th>Hours</th>
+      </tr></thead><tbody>
+        ${sorted.map(l => `<tr>
+          <td style="white-space:nowrap;">${l.log_date || '—'}</td>
+          <td>${(l.profiles?.full_name || l.team_member || '—').replace(/</g,'&lt;')}</td>
+          <td>
+            <strong>${(l.task_project || '—').replace(/</g,'&lt;')}</strong>
+            ${l.task_description ? `<div style="font-size:11px;color:var(--text-3);margin-top:2px;">${l.task_description.replace(/</g,'&lt;')}</div>` : ''}
+          </td>
+          <td><strong>${parseFloat(l.hours_spent || 0).toFixed(1)}h</strong></td>
+        </tr>`).join('')}
+      </tbody></table>`;
+  }
+
+  modal.classList.add('open');
+}
+function closeProjAnalyticsDrill() {
+  document.getElementById('projDrillModal').classList.remove('open');
+}
+
+init();
+</script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+    }
+  </script>
+</body>
+</html>

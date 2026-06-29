@@ -1,0 +1,35 @@
+{
+  "folders": [
+    {
+      "name": "EBS Project Tracker",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "node_modules": true,
+      "dist": true,
+      ".git": true
+    },
+    "search.exclude": {
+      "node_modules": true,
+      "dist": true,
+      "package-lock.json": true
+    },
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.formatOnSave": false,
+    "files.eol": "\n",
+    "emmet.includeLanguages": {
+      "javascript": "javascriptreact"
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "dbaeumer.vscode-eslint",
+      "esbenp.prettier-vscode",
+      "bradlc.vscode-tailwindcss",
+      "dsznajder.es7-react-js-snippets"
+    ]
+  }
+}

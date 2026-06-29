@@ -1,0 +1,23 @@
+Project name : COMBINED
+Ebs@Union@2026
+
+DB
+Admin@test.com
+P@ssw0rd
+
+
+Create user copy uid from db and enter it here 
+
+INSERT INTO profiles (id, full_name, role, email, username)
+VALUES (
+  'bf67c0f7-9d00-4deb-adcf-a4cdf8ac98a7',
+  'Your Full Name',
+  'admin',
+  'your@email.com',
+  'admin'
+)
+ON CONFLICT (id) DO UPDATE
+  SET full_name = EXCLUDED.full_name,
+      role      = 'admin',
+      email     = EXCLUDED.email,
+      username  = EXCLUDED.username;

@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init *)",
+      "Bash(git remote *)",
+      "Bash(git fetch *)",
+      "Bash(curl -s -L https://utcebs.github.io/EBS-/ -o /tmp/deployed.html)",
+      "Read(//tmp/**)",
+      "Bash(curl -s https://utcebs.github.io/EBS-/assets/index-CmYoj1K5.js -o /tmp/deployed.js)",
+      "Bash(grep -oE \"createClient\\\\\\([^\\)]{0,200}\" /tmp/deployed.js)",
+      "Bash(grep -oE \"fetch\\\\\\([^\\)]{0,100}\" /tmp/deployed.js)",
+      "Bash(grep -oE \"https://hddfkkojfvmjuxsyhcgh\\\\.supabase\\\\.co[^\\\\\"']{0,100}\" /tmp/deployed.js)",
+      "Bash(grep -oP \"hddfkkojfvmjuxsyhcgh\\\\.supabase\\\\.co[^;{}]{0,300}\" /tmp/deployed.js)",
+      "Bash(grep -oE \"hddfkkojfvmjuxsyhcgh\\\\.supabase\\\\.co[^;{}\\\\\"]{0,200}\" /tmp/deployed.js)",
+      "Bash(curl -s -H \"apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkZGZra29qZnZtanV4c3loY2doIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDI1MjksImV4cCI6MjA5MjI3ODUyOX0.2EYGf2PPBDpkkY1d2Rp87GY5so05ehx6a0sYfCXHe1Q\" -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkZGZra29qZnZtanV4c3loY2doIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDI1MjksImV4cCI6MjA5MjI3ODUyOX0.2EYGf2PPBDpkkY1d2Rp87GY5so05ehx6a0sYfCXHe1Q\" \"https://hddfkkojfvmjuxsyhcgh.supabase.co/rest/v1/projects?select=*&order=project_number&limit=3\" -w \"\\\\n---STATUS: %{http_code}\\\\n\")",
+      "Bash(grep -oE \"eyJhbGciOi[A-Za-z0-9._-]{20,50}\" /tmp/deployed.js)",
+      "Bash(curl -s -o /tmp/deployed_sw.js -w \"%{http_code}\\\\n\" https://utcebs.github.io/EBS-/sw.js)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)"
+    ]
+  }
+}

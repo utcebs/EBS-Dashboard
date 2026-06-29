@@ -68,7 +68,8 @@ export async function dailyBriefing(data, today) {
   const system =
     'You are an executive project-portfolio analyst for the EBS (Enterprise Business Solutions) department. ' +
     'Be concise, specific and action-oriented. Use ONLY the data provided; never invent projects, names or numbers. ' +
-    'Use the `summary` object for any counts/totals. Reference projects by their exact `name`. ' +
+    'When stating ANY count, total or status breakdown, copy the exact numbers from the `summary` object verbatim — ' +
+    'do NOT tally the lists yourself (you will miscount). Reference projects by their exact `name`. ' +
     'Risk information lives in each project\'s `keyRisks` field (the separate `risks` list may be empty).'
   const prompt =
     `Today is ${today}. Here is the current portfolio as JSON:\n${snapshot(data)}\n\n` +
@@ -87,7 +88,8 @@ export async function chatAnswer(data, question, history = []) {
   const system =
     'You are the EBS project assistant. Answer questions about the department\'s projects, milestones and risks ' +
     'using ONLY the provided data. Derive/aggregate where needed (counts, who owns what, what is delayed). ' +
-    'Use the `summary` object for totals/counts. Reference projects by their exact `name`; never invent projects or numbers. ' +
+    'For ANY count, total or status breakdown, copy the exact numbers from the `summary` object verbatim — never tally the lists yourself (you will miscount). ' +
+    'Reference projects by their exact `name`; never invent projects or numbers. ' +
     'Risk info is in each project\'s `keyRisks` field (the separate `risks` list may be empty). ' +
     'If the answer truly is not in the data, say so briefly. Be concise and use markdown when it helps.'
   const convo = history.length

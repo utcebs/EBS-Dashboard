@@ -2692,7 +2692,7 @@ function LoginPage() {
   return <div className="flex items-center justify-center min-h-[70vh]">
     <div className="w-full max-w-md">
       <div className="text-center mb-8">
-        <div className="w-14 h-14 rounded-2xl bg-brand-600 flex items-center justify-center mx-auto mb-4"><Shield className="text-white" size={24} /></div>
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'linear-gradient(135deg, #f3e2b8 0%, #e3c87f 46%, #c79a4e 100%)', boxShadow: '0 12px 28px -10px rgba(199,154,78,0.55)' }}><Shield style={{ color: '#3a2a08' }} size={24} /></div>
         <h1 className="text-2xl font-bold font-display text-surface-900">Admin Login</h1>
         <p className="text-sm text-surface-500 mt-1">Sign in to manage projects</p>
       </div>
@@ -2701,7 +2701,7 @@ function LoginPage() {
           {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">{error}</div>}
           <FormField label="Email"><input id="login-email" name="email" className={inputCls} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="admin@company.com" autoComplete="email" required /></FormField>
           <FormField label="Password"><input id="login-password" name="password" className={inputCls} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" required /></FormField>
-          <button type="submit" disabled={loading} className="w-full py-2.5 bg-brand-600 text-white rounded-xl font-medium text-sm hover:bg-brand-700 transition-colors disabled:opacity-50">{loading ? 'Signing in...' : 'Sign In'}</button>
+          <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl font-semibold text-sm transition-all hover:brightness-105 disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #f3e2b8 0%, #e3c87f 46%, #c79a4e 100%)', color: '#3a2a08', boxShadow: '0 12px 28px -10px rgba(199,154,78,0.5)' }}>{loading ? 'Signing in...' : 'Sign In'}</button>
         </form>
       </div>
     </div>

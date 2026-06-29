@@ -923,13 +923,13 @@ export default function LandingPage({ isAdmin, theme, setTheme }) {
             .landing-light class on the page root, so the user toggling
             the theme also switches the background footage. */}
         <video
-          ref={videoRef}
+          ref={(el) => { videoRef.current = el; if (el) { el.muted = true; el.defaultMuted = true } }}
           src="./real21.mp4"
           autoPlay
           muted
           loop
           playsInline
-          preload="auto"
+          preload={lightMode ? 'none' : 'auto'}
           disablePictureInPicture
           aria-hidden="true"
           tabIndex={-1}
@@ -942,12 +942,13 @@ export default function LandingPage({ isAdmin, theme, setTheme }) {
           }}
         />
         <video
+          ref={(el) => { if (el) { el.muted = true; el.defaultMuted = true } }}
           src="./mp410.mp4"
           autoPlay
           muted
           loop
           playsInline
-          preload="auto"
+          preload={lightMode ? 'auto' : 'none'}
           disablePictureInPicture
           aria-hidden="true"
           tabIndex={-1}

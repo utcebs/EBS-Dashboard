@@ -21,29 +21,44 @@ export async function fetchPortfolio() {
   return { projects: p.data || [], milestones: m.data || [], risks: r.data || [] }
 }
 
-// Trim rows to the fields that matter (tolerant of column-name variants).
+// Trim rows to the fields that matter — using the REAL EBS column names.
 const slimProject = (p) => ({
-  no: p.project_number, name: p.project_name || p.name,
+  no: p.project_number, name: p.project_name, module: p.dept_module,
   status: p.status, priority: p.priority, phase: p.phase,
-  percent: p.percent_complete, owner: p.business_owner || p.owner,
-  dev: p.development_status, uat: p.uat_status,
-  keyRisks: p.key_risks, dependencies: p.dependencies,
+  percent: p.percent_complete, owner: p.business_owner,
+  start: p.start_date, end: p.end_date,
+  objective: p.objective, impact: p.business_impact,
+  keyRisks: p.key_risks, mitigation: p.mitigation,
+  dependencies: p.dependencies, actionsNeeded: p.actions_needed,
+  costKWD: p.total_cost_kwd,
 })
 const slimMilestone = (m) => ({
-  project: m.project_id, no: m.milestone_number,
-  name: m.name || m.title || m.milestone, date: m.due_date || m.target_date || m.date,
-  status: m.status, owner: m.owner,
+  no: m.milestone_number, deliverable: m.deliverable,
+  target: m.target_date, actual: m.actual_date,
+  dev: m.development_status, uat: m.uat_status,
+  owner: m.owner, dependencies: m.dependencies, remarks: m.remarks,
 })
 const slimRisk = (r) => ({
   project: r.project_id, no: r.risk_number,
-  risk: r.description || r.risk || r.key_risk, severity: r.severity || r.impact,
-  likelihood: r.likelihood || r.probability, mitigation: r.mitigation_action || r.mitigation, owner: r.owner,
+  risk: r.description || r.risk || r.title, severity: r.severity || r.impact,
+  likelihood: r.likelihood || r.probability,
+  mitigation: r.mitigation_action || r.mitigation, owner: r.owner,
 })
 
 function snapshot({ projects, milestones, risks }) {
+  const nameById = {}
+  projects.forEach((p) => { nameById[p.id] = p.project_name })
+  const byStatus = {}, byPriority = {}
+  projects.forEach((p) => {
+    byStatus[p.status || 'Unknown'] = (byStatus[p.status || 'Unknown'] || 0) + 1
+    byPriority[p.priority || 'Unknown'] = (byPriority[p.priority || 'Unknown'] || 0) + 1
+  })
   return JSON.stringify({
+    // Pre-computed, reliable aggregates so the model never has to miscount.
+    summary: { totalProjects: projects.length, byStatus, byPriority, totalMilestones: milestones.length, totalRisks: risks.length },
     projects: projects.map(slimProject),
-    milestones: milestones.map(slimMilestone),
+    // Tag each milestone with its project NAME (the row only stores a uuid).
+    milestones: milestones.map((m) => ({ project: nameById[m.project_id] || 'Unknown', ...slimMilestone(m) })),
     risks: risks.map(slimRisk),
   })
 }
@@ -52,7 +67,9 @@ function snapshot({ projects, milestones, risks }) {
 export async function dailyBriefing(data, today) {
   const system =
     'You are an executive project-portfolio analyst for the EBS (Enterprise Business Solutions) department. ' +
-    'Be concise, specific and action-oriented. Use ONLY the data provided; never invent projects or numbers.'
+    'Be concise, specific and action-oriented. Use ONLY the data provided; never invent projects, names or numbers. ' +
+    'Use the `summary` object for any counts/totals. Reference projects by their exact `name`. ' +
+    'Risk information lives in each project\'s `keyRisks` field (the separate `risks` list may be empty).'
   const prompt =
     `Today is ${today}. Here is the current portfolio as JSON:\n${snapshot(data)}\n\n` +
     'Write a short daily briefing in markdown with these sections (omit a section if there is nothing to say):\n' +
@@ -70,6 +87,8 @@ export async function chatAnswer(data, question, history = []) {
   const system =
     'You are the EBS project assistant. Answer questions about the department\'s projects, milestones and risks ' +
     'using ONLY the provided data. Derive/aggregate where needed (counts, who owns what, what is delayed). ' +
+    'Use the `summary` object for totals/counts. Reference projects by their exact `name`; never invent projects or numbers. ' +
+    'Risk info is in each project\'s `keyRisks` field (the separate `risks` list may be empty). ' +
     'If the answer truly is not in the data, say so briefly. Be concise and use markdown when it helps.'
   const convo = history.length
     ? 'Recent conversation:\n' + history.map((h) => `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.text}`).join('\n') + '\n\n'

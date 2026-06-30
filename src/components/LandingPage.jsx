@@ -689,6 +689,16 @@ export default function LandingPage({ isAdmin, theme, setTheme }) {
   const hoverCountRef = useRef(0)
   const [videoFocused, setVideoFocused] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
+  // Phones can't handle the large hero videos (21MB + 19MB) — they decode in
+  // memory and crash the iOS browser tab on scroll-back ("a problem repeatedly
+  // occurred"). On narrow screens we skip the videos and show a static gradient.
+  const [isNarrow, setIsNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 820px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 820px)')
+    const on = () => setIsNarrow(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
   // Keep the hero background video reliably playing on mobile. iOS/Brave block
   // autoplay and aggressively evict the (large) dark clip when it scrolls out of
   // view, so it comes back "unloaded". We force-mute, (re)play whenever the clip
@@ -922,44 +932,53 @@ export default function LandingPage({ isAdmin, theme, setTheme }) {
             for light. CSS swaps which one is visible based on the
             .landing-light class on the page root, so the user toggling
             the theme also switches the background footage. */}
-        <video
-          ref={(el) => { videoRef.current = el; if (el) { el.muted = true; el.defaultMuted = true } }}
-          src="./real21.mp4"
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload={lightMode ? 'none' : 'auto'}
-          disablePictureInPicture
-          aria-hidden="true"
-          tabIndex={-1}
-          className="hero-video-dark absolute inset-0 w-full h-full object-cover pointer-events-none select-none z-0"
-          style={{
-            transform: videoFocused ? 'scale(1.05)' : 'scale(1)',
-            filter: videoFocused ? 'blur(2px)' : 'blur(0px)',
-            transition: 'transform 0.45s cubic-bezier(.4,0,.2,1), filter 0.45s ease-out',
-            willChange: 'transform, filter',
-          }}
-        />
-        <video
-          ref={(el) => { if (el) { el.muted = true; el.defaultMuted = true } }}
-          src="./mp410.mp4"
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload={lightMode ? 'auto' : 'none'}
-          disablePictureInPicture
-          aria-hidden="true"
-          tabIndex={-1}
-          className="hero-video-light absolute inset-0 w-full h-full object-cover pointer-events-none select-none z-0"
-          style={{
-            transform: videoFocused ? 'scale(1.05)' : 'scale(1)',
-            filter: videoFocused ? 'blur(2px)' : 'blur(0px)',
-            transition: 'transform 0.45s cubic-bezier(.4,0,.2,1), filter 0.45s ease-out',
-            willChange: 'transform, filter',
-          }}
-        />
+        {isNarrow ? (
+          /* Phones: static gradient instead of the heavy videos (prevents the
+             iOS memory crash on scroll-back). */
+          <div className="absolute inset-0 z-0 pointer-events-none" aria-hidden="true"
+            style={{ background: 'radial-gradient(ellipse 95% 70% at 50% 22%, rgba(140,104,40,0.32), transparent 60%), linear-gradient(180deg, #0e0b07 0%, #08070a 100%)' }} />
+        ) : (
+          <>
+            <video
+              ref={(el) => { videoRef.current = el; if (el) { el.muted = true; el.defaultMuted = true } }}
+              src="./real21.mp4"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload={lightMode ? 'none' : 'auto'}
+              disablePictureInPicture
+              aria-hidden="true"
+              tabIndex={-1}
+              className="hero-video-dark absolute inset-0 w-full h-full object-cover pointer-events-none select-none z-0"
+              style={{
+                transform: videoFocused ? 'scale(1.05)' : 'scale(1)',
+                filter: videoFocused ? 'blur(2px)' : 'blur(0px)',
+                transition: 'transform 0.45s cubic-bezier(.4,0,.2,1), filter 0.45s ease-out',
+                willChange: 'transform, filter',
+              }}
+            />
+            <video
+              ref={(el) => { if (el) { el.muted = true; el.defaultMuted = true } }}
+              src="./mp410.mp4"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload={lightMode ? 'auto' : 'none'}
+              disablePictureInPicture
+              aria-hidden="true"
+              tabIndex={-1}
+              className="hero-video-light absolute inset-0 w-full h-full object-cover pointer-events-none select-none z-0"
+              style={{
+                transform: videoFocused ? 'scale(1.05)' : 'scale(1)',
+                filter: videoFocused ? 'blur(2px)' : 'blur(0px)',
+                transition: 'transform 0.45s cubic-bezier(.4,0,.2,1), filter 0.45s ease-out',
+                willChange: 'transform, filter',
+              }}
+            />
+          </>
+        )}
         {/* Subtle dark vignette over the video so the gold overlays + white
             text below remain legible regardless of which frame is showing. */}
         <div

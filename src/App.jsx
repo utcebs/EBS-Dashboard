@@ -945,7 +945,7 @@ function Layout() {
   // (the iOS rubber-band area shows the <html> background).
   useEffect(() => {
     try { localStorage.setItem('ebs.theme', theme) } catch {}
-    document.documentElement.style.backgroundColor = theme === 'light' ? '#f2ede2' : '#0c0a08'
+    document.documentElement.style.backgroundColor = theme === 'light' ? '#fdfaf2' : '#0c0a08'
   }, [theme])
 
   // Scroll to top on every route change. The actual scroll container is

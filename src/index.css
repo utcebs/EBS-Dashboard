@@ -1602,9 +1602,13 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   background: rgba(0,0,0,0.7);
   backdrop-filter: blur(8px);
 }
-.app-dark .modal-backdrop > div {
-  background: linear-gradient(180deg, rgba(26,26,30,1), rgba(14,14,18,1)) !important;
-  border: 1px solid rgba(255,255,255,0.1) !important;
+/* Plum + gold modal panel (was neutral charcoal). The `.bg-white` raises
+   specificity above the glass-card rule so this wins for the modal panel. */
+.app-dark .modal-backdrop > div.bg-white {
+  background: linear-gradient(180deg, #241b32, #181221) !important;
+  border: 1px solid rgba(212,184,123,0.24) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 /* Sidebar active link — stronger contrast */

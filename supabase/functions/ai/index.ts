@@ -35,7 +35,10 @@ async function callGemini(model: string, key: string, system: string, prompt: st
   const body = {
     systemInstruction: system ? { parts: [{ text: system }] } : undefined,
     contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.6, maxOutputTokens: 1400 },
+    // thinkingBudget:0 disables 2.5-flash's default "thinking" (which otherwise
+    // eats the output budget and truncates the briefing). maxOutputTokens raised
+    // so a full multi-section briefing fits.
+    generationConfig: { temperature: 0.6, maxOutputTokens: 2600, thinkingConfig: { thinkingBudget: 0 } },
   }
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
   if (!res.ok) {
@@ -75,7 +78,9 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: CORS })
 
   try {
-    const { system = "", prompt = "", tier = "light" } = await req.json()
+    const { system = "", prompt = "", tier = "light", warmup = false } = await req.json()
+    // Warm-up ping (sent when the chatbot opens) — boots this instance without an AI call.
+    if (warmup) return new Response(JSON.stringify({ ok: true }), { headers: { ...CORS, "content-type": "application/json" } })
     if (!prompt) return new Response(JSON.stringify({ error: "prompt required" }), { status: 400, headers: { ...CORS, "content-type": "application/json" } })
 
     const keys = geminiKeys()

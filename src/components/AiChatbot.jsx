@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Sparkles, X, Send } from 'lucide-react'
-import { fetchPortfolio, chatAnswer } from '../aiClient'
+import { fetchPortfolio, chatAnswer, warmAI } from '../aiClient'
 import MarkdownLite from './MarkdownLite'
 
 const GOLD = 'linear-gradient(135deg, #f3e2b8 0%, #e3c87f 46%, #c79a4e 100%)'
@@ -15,6 +15,14 @@ export default function AiChatbot() {
   const scrollRef = useRef(null)
 
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight }, [msgs, busy, open])
+
+  // When the panel opens, use the typing gap to pre-load the data + wake the
+  // function — so even the first question answers fast.
+  useEffect(() => {
+    if (!open) return
+    if (!dataRef.current) fetchPortfolio().then((d) => { dataRef.current = d }).catch(() => {})
+    warmAI()
+  }, [open])
 
   // No visible launcher — the assistant only opens via Ctrl + ' (apostrophe).
   useEffect(() => {

@@ -11,6 +11,11 @@ export async function callAI(system, prompt, tier = 'light') {
   return data
 }
 
+// Boot the Edge Function instance (no AI call) so the first real request is fast.
+export async function warmAI() {
+  try { await supabase.functions.invoke('ai', { body: { warmup: true } }) } catch { /* ignore */ }
+}
+
 // Pull the live portfolio (public read client — same pattern the app uses).
 export async function fetchPortfolio() {
   const [p, m, r] = await Promise.all([

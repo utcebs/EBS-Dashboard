@@ -73,6 +73,7 @@ export async function dailyBriefing(data, today) {
     'Risk information lives in each project\'s `keyRisks` field (the separate `risks` list may be empty).'
   const prompt =
     `Today is ${today}. Here is the current portfolio as JSON:\n${snapshot(data)}\n\n` +
+    'Start directly with the **Headline** section — do NOT add a top-level title or date heading. ' +
     'Write a short daily briefing in markdown with these sections (omit a section if there is nothing to say):\n' +
     '**Headline** — one line on overall portfolio health.\n' +
     '**Needs attention** — delayed / at-risk projects, each with a one-line why.\n' +

@@ -3231,7 +3231,7 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 }
 .dash-pager-info { font-size: 13px; color: rgba(58,47,29,0.55); }
 .app-dark .dash-pager-info { color: rgba(245,230,194,0.55); }
-.dash-pager-controls { display: flex; align-items: center; gap: 4px; }
+.dash-pager-controls { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: center; }
 .dash-pager-btn {
   min-width: 34px; height: 34px; padding: 0 8px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -3244,6 +3244,12 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .dash-pager-btn:disabled { opacity: 0.4; cursor: default; }
 .dash-pager-btn.is-active { background: linear-gradient(160deg, #e6cf94, #caa15a); color: #2a2113; border-color: rgba(212,184,123,0.6); }
 .dash-pager-ellipsis { padding: 0 4px; color: rgba(58,47,29,0.4); }
+/* Mobile: keep the pager inside the screen (smaller buttons, centered, wraps) */
+@media (max-width: 640px) {
+  .dash-pager { justify-content: center; }
+  .dash-pager-controls { width: 100%; gap: 3px; }
+  .dash-pager-btn { min-width: 30px; height: 32px; padding: 0 5px; font-size: 12px; }
+}
 .app-dark .dash-pager-btn { color: rgba(245,230,194,0.6); border-color: rgba(212,184,123,0.2); }
 .app-dark .dash-pager-btn:hover:not(:disabled) { border-color: rgba(212,184,123,0.45); color: #f7f2e7; background: rgba(212,184,123,0.08); }
 .app-dark .dash-pager-btn.is-active { color: #2a2113; box-shadow: 0 0 16px -6px rgba(212,184,123,0.6); }

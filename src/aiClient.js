@@ -83,6 +83,18 @@ export async function dailyBriefing(data, today) {
   return callAI(system, prompt, 'heavy')
 }
 
+// ── Cached briefing (shared across all users, regenerated on demand) ─────────
+export async function getCachedBriefing() {
+  const { data } = await supabasePublic
+    .from('ai_briefings').select('*').order('generated_at', { ascending: false }).limit(1)
+  return (data && data[0]) || null
+}
+export async function saveBriefing(content, provider) {
+  const { data } = await supabase
+    .from('ai_briefings').insert({ content, provider }).select().single()
+  return data || null
+}
+
 // ── Chatbot ─────────────────────────────────────────────────────────────────
 export async function chatAnswer(data, question, history = []) {
   const system =

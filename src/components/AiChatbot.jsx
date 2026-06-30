@@ -16,6 +16,18 @@ export default function AiChatbot() {
 
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight }, [msgs, busy, open])
 
+  // No visible launcher — the assistant only opens via Ctrl + ' (apostrophe).
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.ctrlKey && (e.key === "'" || e.code === 'Quote')) {
+        e.preventDefault()
+        setOpen((o) => !o)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   async function send(e) {
     e?.preventDefault()
     const q = input.trim()
@@ -36,13 +48,6 @@ export default function AiChatbot() {
 
   return (
     <>
-      {!open && (
-        <button onClick={() => setOpen(true)} aria-label="Open assistant"
-          style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 150, width: 56, height: 56, borderRadius: '50%', border: 'none', cursor: 'pointer', background: GOLD, boxShadow: '0 12px 30px -8px rgba(199,154,78,0.6)', display: 'grid', placeContent: 'center' }}>
-          <Sparkles size={24} color="#3a2a08" />
-        </button>
-      )}
-
       {open && createPortal(
         <div style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 150, width: 380, maxWidth: '92vw', height: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', background: '#171320', border: '1px solid rgba(212,184,123,0.28)', borderRadius: 18, overflow: 'hidden', boxShadow: '0 30px 80px -28px rgba(0,0,0,0.9)', color: '#f3efe7' }}>
           {/* header */}

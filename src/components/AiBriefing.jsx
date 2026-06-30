@@ -27,8 +27,8 @@ export default function AiBriefing() {
   return (
     <>
       <button onClick={run}
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm transition-all hover:brightness-105"
-        style={{ background: GOLD, color: '#3a2a08', boxShadow: '0 10px 24px -10px rgba(199,154,78,0.5)' }}>
+        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all hover:brightness-105 whitespace-nowrap shadow-sm"
+        style={{ background: GOLD, color: '#3a2a08' }}>
         <Sparkles size={16} /> Daily briefing
       </button>
 

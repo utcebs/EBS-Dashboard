@@ -13,7 +13,8 @@ html {
 
 body {
   font-family: 'DM Sans', system-ui, sans-serif;
-  background: #f8f9fc;
+  /* No fixed background here — the overscroll/canvas colour comes from the
+     theme-aware <html> background set in index.html + on theme toggle. */
   color: #1a202c;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;

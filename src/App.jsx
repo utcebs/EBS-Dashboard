@@ -930,6 +930,16 @@ function Layout() {
     return () => mq.removeEventListener('change', onChange)
   }, [])
   const showBgVideo = !isLanding && isWideLayout && theme === 'dark'
+  // Defer the heavy plum background video until the page is interactive, so the
+  // 8.5MB download/decode doesn't compete with the dashboard's data + charts on
+  // first paint. The plum still-image (.app-dark bg) shows until then.
+  const [bgReady, setBgReady] = useState(false)
+  useEffect(() => {
+    const ric = window.requestIdleCallback
+    const id = ric ? ric(() => setBgReady(true), { timeout: 2500 }) : setTimeout(() => setBgReady(true), 1500)
+    return () => { if (ric && window.cancelIdleCallback) window.cancelIdleCallback(id); else clearTimeout(id) }
+  }, [])
+  const playBgVideo = showBgVideo && bgReady
 
   // Persist theme choice
   useEffect(() => {
@@ -991,7 +1001,7 @@ function Layout() {
 
     {/* Dashboard background video — fixed, behind everything, looping. The
         plum veil keeps cards/text legible; glass cards refract it. */}
-    {showBgVideo && (
+    {playBgVideo && (
       <div className="app-bg-video-layer" aria-hidden="true">
         <video key={bgVideoSrc} className="app-bg-video" src={bgVideoSrc} autoPlay muted loop playsInline preload="auto" disablePictureInPicture tabIndex={-1} />
         <div className="app-bg-video-veil" />
@@ -1084,7 +1094,7 @@ function Layout() {
     </aside>
 
     {/* Main */}
-    <main id="main-scroll" style={{ '--app-bg-image': appBgImage }} className={`flex-1 overflow-y-auto ${isLanding ? '' : 'pb-20'} lg:pb-0 ${themeClass} ${showBgVideo ? 'has-bg-video' : ''}`}>
+    <main id="main-scroll" style={{ '--app-bg-image': appBgImage }} className={`flex-1 overflow-y-auto ${isLanding ? '' : 'pb-20'} lg:pb-0 ${themeClass} ${playBgVideo ? 'has-bg-video' : ''}`}>
 
       <div className={isLanding ? '' : 'px-4 pt-20 pb-8 sm:px-6 lg:px-8'}>
         <Routes>

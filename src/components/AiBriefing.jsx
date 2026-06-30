@@ -6,17 +6,14 @@ import MarkdownLite from './MarkdownLite'
 
 const GOLD = 'linear-gradient(135deg, #f3e2b8 0%, #e3c87f 46%, #c79a4e 100%)'
 
-function lastGenLabel(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  const mins = Math.round((Date.now() - d.getTime()) / 60000)
-  let rel
-  if (mins < 1) rel = 'just now'
-  else if (mins < 60) rel = `${mins} min ago`
-  else if (mins < 1440) rel = `${Math.round(mins / 60)} h ago`
-  else rel = `${Math.round(mins / 1440)} d ago`
-  return `${d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })} · ${rel}`
+function relTime(iso) {
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins} min ago`
+  if (mins < 1440) return `${Math.round(mins / 60)} h ago`
+  return `${Math.round(mins / 1440)} d ago`
 }
+const absTime = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
 
 export default function AiBriefing() {
   const [open, setOpen] = useState(false)
@@ -68,22 +65,22 @@ export default function AiBriefing() {
           <div onClick={(e) => e.stopPropagation()}
             style={{ width: '100%', maxWidth: 640, background: '#1b1622', border: '1px solid rgba(212,184,123,0.28)', borderRadius: 18, boxShadow: '0 30px 80px -30px rgba(0,0,0,0.9)', color: '#f3efe7' }}>
             {/* header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid rgba(212,184,123,0.16)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ width: 30, height: 30, borderRadius: 9, background: GOLD, display: 'grid', placeContent: 'center' }}><Sparkles size={16} color="#3a2a08" /></span>
-                <div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, padding: '14px 16px', borderBottom: '1px solid rgba(212,184,123,0.16)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <span style={{ width: 30, height: 30, borderRadius: 9, background: GOLD, display: 'grid', placeContent: 'center', flexShrink: 0 }}><Sparkles size={16} color="#3a2a08" /></span>
+                <div style={{ minWidth: 0 }}>
                   <strong style={{ letterSpacing: 0.2 }}>Daily Briefing</strong>
                   {briefing?.generated_at && (
-                    <div style={{ fontSize: 11, color: 'rgba(245,230,194,0.55)', marginTop: 1 }}>Last generated: {lastGenLabel(briefing.generated_at)}</div>
+                    <div title={absTime(briefing.generated_at)} style={{ fontSize: 11, color: 'rgba(245,230,194,0.5)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Updated {relTime(briefing.generated_at)}</div>
                   )}
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                 <button onClick={generate} disabled={busy} title="Regenerate now"
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 10px', borderRadius: 9, cursor: busy ? 'default' : 'pointer', color: '#e6cf94', background: 'rgba(230,201,148,0.1)', border: '1px solid rgba(212,184,123,0.3)', opacity: busy ? 0.5 : 1 }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, padding: '6px 9px', borderRadius: 9, cursor: busy ? 'default' : 'pointer', color: '#e6cf94', background: 'rgba(230,201,148,0.1)', border: '1px solid rgba(212,184,123,0.3)', opacity: busy ? 0.5 : 1, whiteSpace: 'nowrap' }}>
                   <RefreshCw size={13} className={loading ? 'ai-spin' : ''} /> Regenerate
                 </button>
-                <button onClick={() => setOpen(false)} style={{ background: 'transparent', border: 'none', color: '#c9b48a', cursor: 'pointer' }}><X size={20} /></button>
+                <button onClick={() => setOpen(false)} style={{ background: 'transparent', border: 'none', color: '#c9b48a', cursor: 'pointer', padding: 2 }}><X size={20} /></button>
               </div>
             </div>
             {/* body */}

@@ -1267,14 +1267,14 @@ function Dashboard() {
         <p className="text-sm text-surface-500 mt-0.5">Click any card, chart, or row to drill into projects</p>
       </div>
       {/* Project-level dashboard selector */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <AiBriefing />
         <button onClick={() => generateReport(projects)}
           className="flex items-center gap-2 px-4 py-2 bg-surface-900 text-white rounded-xl text-sm font-medium hover:bg-surface-800 transition-colors shadow-sm whitespace-nowrap">
           <Presentation size={16} /> Generate MBR
         </button>
         <select value={selectedProjectId} onChange={e => { if (e.target.value) navigate(`/projects/${e.target.value}`) }}
-          className={`${selectCls} w-auto min-w-[180px] sm:min-w-[220px] text-sm`}>
+          className={`${selectCls} w-full sm:w-auto sm:min-w-[220px] text-sm`}>
           <option value="">Jump to project...</option>
           {projects.map(p => <option key={p.id} value={p.id}>#{p.project_number} — {p.project_name}</option>)}
         </select>

@@ -13,6 +13,14 @@ function inline(text) {
   return parts
 }
 
+// "2026-06-30" -> "30 Jun 2026"
+function prettyDate(iso) {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!m) return iso
+  const mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][parseInt(m[2], 10) - 1]
+  return `${parseInt(m[3], 10)} ${mo} ${m[1]}`
+}
+
 export default function MarkdownLite({ text }) {
   const lines = (text || '').split('\n')
   const out = []
@@ -20,14 +28,20 @@ export default function MarkdownLite({ text }) {
     const t = raw.trim()
     if (!t) { out.push(<div key={idx} style={{ height: 10 }} />); return }
 
-    // # / ## / ### headings → document title
+    // # / ## / ### headings → document title (split off a trailing date)
     const h = t.match(/^(#{1,3})\s+(.*)$/)
     if (h) {
       const lvl = h[1].length
+      let title = h[2], date = null
+      const dm = title.match(/^(.*?)\s*[–—-]\s*(\d{4}-\d{2}-\d{2})\s*$/)
+      if (dm) { title = dm[1].trim(); date = dm[2] }
       out.push(
-        <div key={idx} style={{ fontSize: lvl === 1 ? 18 : 16, fontWeight: 800, color: '#f4ead0', letterSpacing: 0.2, margin: idx === 0 ? '0 0 10px' : '16px 0 8px' }}>
-          {inline(h[2])}
+        <div key={idx} style={{ fontSize: lvl === 1 ? 18 : 16, fontWeight: 800, color: '#f4ead0', letterSpacing: 0.2, margin: idx === 0 ? '0 0 6px' : '16px 0 6px' }}>
+          {inline(title)}
         </div>
+      )
+      if (date) out.push(
+        <div key={idx + '-d'} style={{ display: 'inline-block', fontSize: 11.5, fontWeight: 600, color: '#c9b48a', background: 'rgba(230,201,148,0.10)', border: '1px solid rgba(212,184,123,0.25)', borderRadius: 8, padding: '3px 10px', letterSpacing: 0.4, marginBottom: 10 }}>{prettyDate(date)}</div>
       )
       return
     }

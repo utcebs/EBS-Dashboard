@@ -1754,13 +1754,29 @@ function PhaseStepper({ phases, current }) {
   const curIdx = phases.indexOf(current)
   const scrollRef = useRef(null)
   const curRef = useRef(null)
-  // On open, scroll the horizontal stepper so the current stage is centered
-  // instead of defaulting to the first phase.
+  // On open, scroll so the current stage sits centered instead of pinned to the
+  // first phase. The flex row itself has no overflow — the ACTUAL scroll
+  // container is its parent (the overflow-x-auto card), so scroll that. Re-run
+  // after paint + web-font load + resize, otherwise mobile measures too early
+  // (fonts shift widths) and the centering silently lands on 0.
   useLayoutEffect(() => {
-    const c = scrollRef.current, el = curRef.current
-    if (!c || !el) return
-    const cr = c.getBoundingClientRect(), er = el.getBoundingClientRect()
-    c.scrollLeft = Math.max(0, c.scrollLeft + (er.left + er.width / 2) - (cr.left + cr.width / 2))
+    const inner = scrollRef.current
+    if (!inner || curIdx < 0) return
+    const scroller = inner.parentElement
+    if (!scroller) return
+    const center = () => {
+      const el = curRef.current
+      if (!el) return
+      const sr = scroller.getBoundingClientRect(), er = el.getBoundingClientRect()
+      const target = scroller.scrollLeft + (er.left + er.width / 2) - (sr.left + sr.width / 2)
+      scroller.scrollLeft = Math.max(0, Math.min(target, scroller.scrollWidth - scroller.clientWidth))
+    }
+    center()
+    const raf = requestAnimationFrame(() => { center(); requestAnimationFrame(center) })
+    let cancelled = false
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (!cancelled) center() })
+    window.addEventListener('resize', center)
+    return () => { cancelled = true; cancelAnimationFrame(raf); window.removeEventListener('resize', center) }
   }, [curIdx])
   return (
     <div className="pd-stepper" ref={scrollRef}>

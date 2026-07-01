@@ -674,6 +674,15 @@ export default function LandingPage({ isAdmin, theme, setTheme }) {
         ? (next(lightMode) ? 'light' : 'dark')
         : (next ? 'light' : 'dark'))
     : setLocalLight
+  // Throttle the theme toggle — hammering it on mobile churns the hero videos
+  // and can crash the tab. Ignore taps within 350ms of the last.
+  const lastToggleRef = useRef(0)
+  const toggleTheme = useCallback(() => {
+    const now = Date.now()
+    if (now - lastToggleRef.current < 350) return
+    lastToggleRef.current = now
+    setLightMode((v) => !v)
+  }, [setLightMode])
   // Business card modal open state. Triggered from the floating dock entry
   // and the top hero nav strip; card content is pulled from the team lead.
   const [cardOpen, setCardOpen] = useState(false)
@@ -894,7 +903,7 @@ export default function LandingPage({ isAdmin, theme, setTheme }) {
     <div className={`overflow-x-clip ${lightMode ? 'landing-light' : ''}`}>
     <FloatingSideDock
       isDark={!lightMode}
-      onToggleTheme={() => setLightMode(v => !v)}
+      onToggleTheme={toggleTheme}
       scrollToSection={scrollToSectionWithCompletion}
       onOpenContact={() => setCardOpen(true)}
     />
@@ -930,7 +939,7 @@ export default function LandingPage({ isAdmin, theme, setTheme }) {
           muted
           loop
           playsInline
-          preload={lightMode ? 'none' : 'auto'}
+          preload="auto"
           disablePictureInPicture
           aria-hidden="true"
           tabIndex={-1}
@@ -950,7 +959,7 @@ export default function LandingPage({ isAdmin, theme, setTheme }) {
           muted
           loop
           playsInline
-          preload={lightMode ? 'auto' : 'none'}
+          preload="auto"
           disablePictureInPicture
           aria-hidden="true"
           tabIndex={-1}
@@ -1010,7 +1019,7 @@ export default function LandingPage({ isAdmin, theme, setTheme }) {
             <span className="luxe-nav-dot pointer-events-none" aria-hidden="true" />
             <button
               type="button"
-              onClick={() => setLightMode(v => !v)}
+              onClick={toggleTheme}
               className="hero-nav-theme-toggle pointer-events-auto"
               aria-label={lightMode ? 'Switch to dark mode' : 'Switch to light mode'}
               title={lightMode ? 'Switch to dark mode' : 'Switch to light mode'}
@@ -1023,7 +1032,7 @@ export default function LandingPage({ isAdmin, theme, setTheme }) {
           <div className="hero-nav-mobile-bar sm:hidden flex items-center justify-end gap-3 pr-1 pointer-events-auto">
             <button
               type="button"
-              onClick={() => setLightMode(v => !v)}
+              onClick={toggleTheme}
               className="hero-nav-theme-toggle"
               aria-label={lightMode ? 'Switch to dark mode' : 'Switch to light mode'}
               title={lightMode ? 'Switch to dark mode' : 'Switch to light mode'}

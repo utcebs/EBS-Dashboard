@@ -8,6 +8,9 @@ export async function callAI(system, prompt, tier = 'light') {
   const { data, error } = await supabase.functions.invoke('ai', { body: { system, prompt, tier } })
   if (error) throw new Error(error.message || 'AI request failed')
   if (data?.error) throw new Error(data.detail || data.error)
+  // A blank answer means the provider (or its backup) returned nothing — treat
+  // it as a failure so callers show the "AI down" message instead of an empty UI.
+  if (!data?.text || !String(data.text).trim()) throw new Error('AI returned an empty response')
   return data
 }
 

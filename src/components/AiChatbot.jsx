@@ -49,7 +49,8 @@ export default function AiChatbot() {
       const r = await chatAnswer(dataRef.current, q, history)
       setMsgs((m) => [...m, { role: 'assistant', text: r.text, provider: r.provider }])
     } catch (err) {
-      setMsgs((m) => [...m, { role: 'assistant', text: '⚠ ' + (err?.message || 'Something went wrong.') }])
+      console.error('Chatbot answer failed:', err)
+      setMsgs((m) => [...m, { role: 'assistant', text: '⚠ Sorry, AI features are currently down. Please try again shortly.' }])
     }
     setBusy(false)
   }

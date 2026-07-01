@@ -5,6 +5,7 @@ import { fetchPortfolio, dailyBriefing, getCachedBriefing, saveBriefing } from '
 import MarkdownLite from './MarkdownLite'
 
 const GOLD = 'linear-gradient(135deg, #f3e2b8 0%, #e3c87f 46%, #c79a4e 100%)'
+const AI_DOWN = 'Sorry, AI features are currently down. Please try again shortly.'
 
 function relTime(iso) {
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
@@ -32,7 +33,8 @@ export default function AiBriefing() {
       const saved = await saveBriefing(r.text, r.provider)
       setBriefing(saved || { content: r.text, provider: r.provider, generated_at: new Date().toISOString() })
     } catch (e) {
-      setError(e?.message || 'Failed to generate briefing')
+      console.error('Daily briefing failed:', e)
+      setError(AI_DOWN)
     }
     setLoading(false)
   }
@@ -45,7 +47,8 @@ export default function AiBriefing() {
       if (cached) { setBriefing(cached); setOpening(false) }
       else { setOpening(false); await generate() }
     } catch (e) {
-      setError(e?.message || 'Failed to load briefing'); setOpening(false)
+      console.error('Briefing load failed:', e)
+      setError(AI_DOWN); setOpening(false)
     }
   }
 

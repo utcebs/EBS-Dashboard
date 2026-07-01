@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, Suspense } from 'react'
 import { Routes, Route, Link, useNavigate, useParams, useLocation } from 'react-router-dom'
-import { supabase, supabasePublic } from './supabaseClient'
+import { supabase, supabasePublic, createEphemeralClient } from './supabaseClient'
 import { fetchPortfolio, mbrContent } from './aiClient'
 import LandingPage from './components/LandingPage'
 import AiBriefing from './components/AiBriefing'
@@ -1832,7 +1832,7 @@ function ProjectDetail() {
     setFetchError(null)
     try {
       const [{ data: p, error: pe }, { data: m, error: me }, { data: r, error: re }, { data: dr, error: drE }] = await Promise.all([
-        supabasePublic.from('projects').select('*').eq('id', id).single(),
+        supabasePublic.from('projects').select('*').eq('id', id).maybeSingle(),
         supabasePublic.from('milestones').select('*').eq('project_id', id).order('milestone_number'),
         supabasePublic.from('risks').select('*').eq('project_id', id).order('risk_number'),
         supabasePublic.from('delay_reasons').select('*').eq('project_id', id).order('reason_number'),
@@ -2815,13 +2815,16 @@ function LoginPage() {
 // Lets an admin choose which profiles appear on the landing page team
 // section, set display order, mark one as team lead, edit job title + bio.
 function AdminTeamPage() {
-  const { isAdmin } = useAuth()
+  const { isAdmin, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [profiles, setProfiles] = useState([])
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState(null)
 
-  useEffect(() => { if (!isAdmin) navigate('/login') }, [isAdmin, navigate])
+  // Wait for auth to settle before judging admin status — isAdmin is false
+  // during the async profile load, which otherwise flash-redirects a real admin
+  // to /login on refresh/deep-link.
+  useEffect(() => { if (!authLoading && !isAdmin) navigate('/login') }, [authLoading, isAdmin, navigate])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -2852,6 +2855,7 @@ function AdminTeamPage() {
     finally { setSavingId(null) }
   }
 
+  if (authLoading) return <Spinner />
   if (!isAdmin) return null
   if (loading) return <Spinner />
 
@@ -2937,7 +2941,7 @@ function AdminTeamPage() {
 
 // ─── ADMIN USERS PAGE ───────────────────────────────────────
 function AdminUsersPage() {
-  const { isAdmin, user } = useAuth()
+  const { isAdmin, user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [showCreate, setShowCreate] = useState(false)
   const [newEmail, setNewEmail] = useState('')
@@ -2947,13 +2951,17 @@ function AdminUsersPage() {
   const [message, setMessage] = useState(''); const [error, setError] = useState('')
   const [resetTarget, setResetTarget] = useState('')
 
-  useEffect(() => { if (!isAdmin) navigate('/login') }, [isAdmin, navigate])
+  // Wait for auth to settle (see AdminTeamPage) before redirecting.
+  useEffect(() => { if (!authLoading && !isAdmin) navigate('/login') }, [authLoading, isAdmin, navigate])
 
   const handleCreateUser = async () => {
     setError(''); setMessage('')
     if (!newFullName.trim()) { setError('Full name is required'); return }
     try {
-      const { data, error: err } = await supabase.auth.signUp({
+      // Run signUp on a throwaway client so it doesn't sign the admin's own
+      // browser in as the newly created user (GoTrue swaps the active session).
+      const signupClient = createEphemeralClient()
+      const { data, error: err } = await signupClient.auth.signUp({
         email: newEmail,
         password: newPassword,
         options: { data: { full_name: newFullName, role: newRole } }
@@ -2984,6 +2992,7 @@ function AdminUsersPage() {
     } catch (err) { setError(err.message) }
   }
 
+  if (authLoading) return <Spinner />
   if (!isAdmin) return null
 
   return <div className="max-w-2xl mx-auto">

@@ -22,3 +22,15 @@ export const supabasePublic = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     storageKey: 'sb-public-readonly',
   },
 })
+
+// Throwaway client for admin operations that would otherwise clobber the current
+// session. `supabase.auth.signUp` signs the browser in AS the new user; running
+// it on a fresh, non-persisting client leaves the admin's own session intact.
+export const createEphemeralClient = () => createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+    storageKey: 'sb-ephemeral-' + Math.random().toString(36).slice(2),
+  },
+})

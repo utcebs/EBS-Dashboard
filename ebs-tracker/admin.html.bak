@@ -1,0 +1,2775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="EBS Tracker" />
+  <meta name="theme-color" content="#080d1a" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="apple-touch-startup-image" href="icon-512.png" />
+  <title>EBS Tracker — Admin Panel</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    /* Chart.js luxury color overrides */
+    :root {
+      --chart-grid: rgba(255,255,255,0.05);
+      --chart-tick: rgba(240,235,226,0.35);
+    }
+    body.light-mode {
+      --chart-grid: rgba(26,22,18,0.06);
+      --chart-tick: rgba(90,82,74,0.5);
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <style>
+    .user-card {
+      display:flex;align-items:center;gap:14px;padding:14px;
+      background:var(--bg-surface);border:1px solid var(--border);
+      border-radius:var(--radius-lg);transition:0.2s;
+    }
+    .user-card:hover { background:var(--bg-hover);border-color:var(--border-light); }
+    .user-card-info { flex:1; }
+    .user-card-name { font-weight:700;font-size:14px; }
+    .user-card-meta { font-size:12px;color:var(--text-3);margin-top:2px; }
+    .admin-tag { display:inline-block;padding:2px 8px;background:rgba(245,158,11,0.15);color:var(--gold);border-radius:999px;font-size:10px;font-weight:700;border:1px solid rgba(245,158,11,0.3);margin-left:8px; }
+    .user-detail-header { background:linear-gradient(135deg,var(--bg-card),var(--bg-hover));border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:20px;margin-bottom:20px;display:flex;align-items:center;gap:16px; }
+  </style>
+</head>
+<body>
+<script>document.addEventListener("DOMContentLoaded",()=>{if(typeof initTheme==="function"){initTheme();injectThemeToggle();}});</script>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+<div class="app-wrapper">
+  <button class="menu-toggle" id="menuToggle">☰</button>
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="main-content fade-in">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">👑 Admin Panel</h1>
+        <p class="page-subtitle">Manage users, review records, compare performance</p>
+      </div>
+    </div>
+
+    <!-- Admin Tabs -->
+    <div class="admin-tabs">
+      <button class="admin-tab active" onclick="switchTab('users')">👥 Users</button>
+      <button class="admin-tab" onclick="switchTab('records')">📋 Records</button>
+      <button class="admin-tab" onclick="switchTab('comparison')">⚖️ Comparison</button>
+      <button class="admin-tab" onclick="switchTab('analysis')">🔬 Employee Analysis</button>
+      <button class="admin-tab" onclick="switchTab('export')">📤 Export</button>
+      <button class="admin-tab" onclick="switchTab('settings')">⚙️ Settings</button>
+      <button class="admin-tab" onclick="switchTab('project-analytics')">📊 Project Analytics</button>
+    </div>
+
+    <!-- TAB: USERS -->
+    <div id="tab-users" class="tab-content">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+        <!-- Create User -->
+        <div class="card">
+          <div class="card-title-lg">➕ Create New User</div>
+          <p style="font-size:12px;color:var(--text-3);margin-bottom:16px;">Creates a Supabase Auth account. The user can log in to both the Project Website and EBS Tracker with this email + password.</p>
+          <div class="form-group">
+            <label class="form-label">Full Name <span class="req">*</span></label>
+            <input type="text" id="newFullName" class="form-control" placeholder="e.g. Sarah Ahmed" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email Address <span class="req">*</span></label>
+            <input type="email" id="newEmail" class="form-control" placeholder="user@company.com" />
+            <div class="form-hint">Used to log in to both apps</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password <span class="req">*</span></label>
+            <input type="password" id="newPassword" class="form-control" placeholder="Min. 6 characters" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Role</label>
+            <select id="newRole" class="form-control">
+              <option value="user">User — log tasks, view projects</option>
+              <option value="admin">Admin — full access to everything</option>
+            </select>
+          </div>
+          <div class="login-error" id="createError" style="margin-bottom:12px;"></div>
+          <button class="btn btn-primary" id="createUserBtn" onclick="createUser()" style="width:100%;justify-content:center;">
+            ⚔️ Create User
+          </button>
+        </div>
+
+        <!-- User List -->
+        <div class="card">
+          <div class="card-title-lg">👥 All Users</div>
+          <div id="userList" style="display:flex;flex-direction:column;gap:10px;">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- User Detail (shown when a user is selected) -->
+      <div id="userDetailSection" style="margin-top:24px;display:none;">
+        <div class="user-detail-header" id="userDetailHeader"></div>
+        <div class="kpi-grid" id="userDetailKPIs"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <span class="card-title-lg mb-0" id="userDetailTitle">Records</span>
+          <button class="btn btn-success btn-sm" onclick="exportUserCSV()">📤 Export CSV</button>
+        </div>
+        <div class="table-wrapper" id="userDetailTable"></div>
+      </div>
+    </div>
+
+    <!-- TAB: RECORDS -->
+    <div id="tab-records" class="tab-content" style="display:none;">
+      <div class="filter-bar" style="margin-bottom:20px;">
+        <span class="filter-label">Member:</span>
+        <select class="form-control" id="recFilterUser" style="max-width:180px;"></select>
+        <span class="filter-label">Category:</span>
+        <select class="form-control" id="recFilterCat" style="max-width:150px;" onchange="onRecCatChange()">
+          <option value="">All Categories</option>
+          <option value="Support">Support</option>
+          <option value="Testing">Testing</option>
+          <option value="Project">Project</option>
+        </select>
+        <select class="form-control" id="recFilterSubcat" style="max-width:180px;">
+          <option value="">All Sub-Categories</option>
+        </select>
+        <span class="filter-label">Month:</span>
+        <select class="form-control" id="recFilterMonth" style="max-width:150px;"></select>
+        <input type="text" class="form-control" id="recSearch" placeholder="🔍 Search…" style="max-width:180px;" />
+        <button class="btn btn-secondary btn-sm" onclick="clearRecFilters()">Clear</button>
+      </div>
+
+      <div class="card" style="padding:0;">
+        <div style="padding:14px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);">
+          <span class="card-title-lg mb-0">All Task Logs</span>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span style="font-size:12px;color:var(--text-3);" id="recRowCount">Loading…</span>
+            <button class="btn btn-success btn-sm" onclick="exportAllCSV()">📤 Export All CSV</button>
+          </div>
+        </div>
+        <div class="table-wrapper" style="border:none;border-radius:0;">
+          <table>
+            <thead><tr>
+              <th>Date</th><th>Team Member</th><th>Task</th><th>Sub-Category</th>
+              <th>Hours</th><th>Accomplishment</th><th>Notes</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="recTableBody">
+              <tr><td colspan="8"><div class="loading"><div class="spinner"></div> Loading…</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: COMPARISON -->
+    <div id="tab-comparison" class="tab-content" style="display:none;">
+
+      <!-- Filter bar -->
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:28px;">
+        <div style="display:flex;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:4px;gap:4px;">
+          <button class="comp-period-btn active" data-val="all" onclick="setPeriod('all')">All Time</button>
+          <button class="comp-period-btn" data-val="month" onclick="setPeriod('month')">By Month</button>
+          <button class="comp-period-btn" data-val="week" onclick="setPeriod('week')">This Week</button>
+        </div>
+        <select class="form-control" id="compMonth" style="max-width:160px;display:none;" onchange="renderComparison()">
+          <option value="">All Months</option>
+        </select>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+          <span id="compPeriodLabel" style="font-size:12px;color:var(--text-3);font-weight:500;"></span>
+          <button class="btn btn-success btn-sm" onclick="exportAllCSV()">📤 Export</button>
+        </div>
+      </div>
+
+      <!-- ── SECTION 1: Stat Spotlight KPI Cards ── -->
+      <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px;">🎯 Stat Spotlights — Who leads each metric?</div>
+      <div id="compSpotlights" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin-bottom:32px;"></div>
+
+      <!-- ── SECTION 2: Employee Profile Cards ── -->
+      <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px;">👤 Employee Profiles</div>
+      <div id="compProfiles" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px;margin-bottom:32px;"></div>
+
+      <!-- ── SECTION 3: Hours vs Expected ── -->
+      <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px;">⏱️ Hours Logged vs Expected</div>
+      <div id="compWorkingTime" style="display:flex;flex-direction:column;gap:10px;margin-bottom:32px;"></div>
+
+      <!-- ── SECTION 4: Radar + Stacked horizontal bar ── -->
+      <div style="display:grid;grid-template-columns:1fr 1.5fr;gap:20px;margin-bottom:28px;">
+        <div class="card" style="padding:20px;">
+          <div style="font-size:12px;font-weight:700;color:var(--text-2);margin-bottom:2px;">🕸️ Performance Radar</div>
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:14px;">Normalized across all dimensions</div>
+          <div style="position:relative;height:260px;"><canvas id="compRadarChart"></canvas></div>
+        </div>
+        <div class="card" style="padding:20px;">
+          <div style="font-size:12px;font-weight:700;color:var(--text-2);margin-bottom:2px;">🏷️ Category Hours Breakdown</div>
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:14px;">Support · Testing · Project per employee — <span style="color:var(--accent-light);">click a bar to drill down ↓</span></div>
+          <div style="position:relative;height:260px;"><canvas id="compCategoryChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- ── Drill-down table (shown on chart click) ── -->
+      <div id="drillDownSection" style="display:none;margin-bottom:28px;">
+        <div class="card" style="padding:0;">
+          <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);">
+            <span id="drillDownTitle" class="card-title-lg mb-0"></span>
+            <button class="btn btn-secondary btn-sm" onclick="closeDrillDown()">✕ Close</button>
+          </div>
+          <div class="table-wrapper" style="border:none;border-radius:0;">
+            <table>
+              <thead><tr>
+                <th>Date</th><th>Task</th><th>Sub-Category</th><th>Hours</th><th>Accomplishment</th>
+              </tr></thead>
+              <tbody id="drillDownBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION 5: Weekly trend + Task share donut ── -->
+      <div style="display:grid;grid-template-columns:1.7fr 1fr;gap:20px;margin-bottom:28px;">
+        <div class="card" style="padding:20px;">
+          <div style="font-size:12px;font-weight:700;color:var(--text-2);margin-bottom:2px;">📈 Weekly Hours Trend</div>
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:14px;">Last 10 weeks — each line is one employee</div>
+          <div style="position:relative;height:240px;"><canvas id="compWeeklyChart"></canvas></div>
+        </div>
+        <div class="card" style="padding:20px;">
+          <div style="font-size:12px;font-weight:700;color:var(--text-2);margin-bottom:2px;">📋 Task Share</div>
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:14px;">Share of total team tasks</div>
+          <div style="position:relative;height:200px;"><canvas id="compTaskDonut"></canvas></div>
+        </div>
+      </div>
+
+      <!-- ── Donut drill-down ── -->
+      <div id="donutDrillSection" style="display:none;margin-bottom:20px;">
+        <div class="card" style="padding:0;">
+          <div style="padding:12px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);">
+            <span id="donutDrillTitle" class="card-title-lg mb-0"></span>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('donutDrillSection').style.display='none'">✕ Close</button>
+          </div>
+          <div class="table-wrapper" style="border:none;border-radius:0;">
+            <table><thead><tr><th>Date</th><th>Task</th><th>Sub-Category</th><th>Hours</th><th>Accomplishment</th></tr></thead>
+            <tbody id="donutDrillBody"></tbody></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION 6: Full metrics table ── -->
+      <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px;">📊 Full Metrics Table</div>
+      <div class="card" style="padding:0;margin-bottom:28px;">
+        <div class="table-wrapper" style="border:none;border-radius:var(--radius-lg);">
+          <table class="comp-table">
+            <thead id="compHead"></thead>
+            <tbody id="compBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <style>
+      .comp-period-btn { padding:7px 16px;border-radius:8px;font-size:12px;font-weight:600;border:none;background:transparent;color:var(--text-2);cursor:pointer;transition:.2s; }
+      .comp-period-btn:hover { color:var(--text-1); }
+      .comp-period-btn.active { background:var(--accent);color:#fff; }
+      .spotlight-card { border-radius:var(--radius-lg);padding:16px;border:1px solid var(--border);background:var(--bg-card);position:relative;overflow:hidden;transition:.2s; }
+      .spotlight-card:hover { transform:translateY(-2px); }
+      .sc-glow { position:absolute;top:-20px;right:-20px;width:80px;height:80px;border-radius:50%;opacity:.12;pointer-events:none; }
+      .emp-profile-card { border-radius:var(--radius-lg);border:1px solid var(--border);background:var(--bg-card);overflow:hidden; }
+      .emp-profile-top { padding:18px 18px 14px;position:relative; }
+      .emp-profile-top::before { content:'';position:absolute;top:0;left:0;right:0;height:3px; }
+      .emp-profile-stats { display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid var(--border); }
+      .emp-stat-box { padding:10px;text-align:center;border-right:1px solid var(--border); }
+      .emp-stat-box:last-child { border-right:none; }
+      .emp-stat-val { font-size:17px;font-weight:800;line-height:1; }
+      .emp-stat-lbl { font-size:10px;color:var(--text-3);font-weight:600;text-transform:uppercase;margin-top:3px; }
+    </style>
+
+    <!-- TAB: EMPLOYEE ANALYSIS -->
+    <div id="tab-analysis" class="tab-content" style="display:none;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Select Employee</div>
+          <select class="form-control" id="analysisUserSel" style="min-width:220px;" onchange="loadEmployeeAnalysis()">
+            <option value="">Choose an employee…</option>
+          </select>
+        </div>
+        <div id="analysisPeriodInfo" style="font-size:12px;color:var(--text-3);"></div>
+      </div>
+      <div id="analysisContent">
+        <div class="empty-state"><div class="empty-icon">🔬</div><div class="empty-text">Select an employee above</div><div class="empty-sub">Their full performance dashboard will appear here</div></div>
+      </div>
+    </div>
+
+    <!-- TAB: SETTINGS -->
+    <div id="tab-settings" class="tab-content" style="display:none;">
+
+      <!-- War Days + Tracker Config -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+        <div class="card">
+          <div class="card-title-lg">⚠️ War / Conflict Days Off</div>
+          <p style="color:var(--text-2);font-size:13px;margin-bottom:16px;line-height:1.5;">
+            Add specific dates or date ranges when the whole team was off due to war or conflict.
+            These are excluded from <strong>everyone's</strong> working day count and expected hours.
+          </p>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1.5fr auto;gap:12px;align-items:end;margin-bottom:16px;flex-wrap:wrap;">
+            <div>
+              <label class="form-label">From</label>
+              <input type="date" id="warRangeStart" class="form-control" />
+            </div>
+            <div>
+              <label class="form-label">To</label>
+              <input type="date" id="warRangeEnd" class="form-control" />
+            </div>
+            <div>
+              <label class="form-label">Label (optional)</label>
+              <input type="text" id="warRangeLabel" class="form-control" placeholder="e.g. Operation X, April Conflict" />
+            </div>
+            <button class="btn btn-primary" onclick="addWarRange()" style="margin-top:auto;white-space:nowrap;">➕ Add</button>
+          </div>
+          <div id="warRangeList" style="display:flex;flex-direction:column;gap:8px;">
+            <div class="loading"><div class="spinner"></div> Loading…</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title-lg">📅 Tracker Config</div>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg-surface);border-radius:var(--radius-sm);border:1px solid var(--border);">
+              <span style="color:var(--text-3);">Start Date</span>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="date" id="trackerStartInput" class="form-control" style="width:150px;padding:4px 8px;font-size:12px;" />
+                <button class="btn btn-primary btn-sm" onclick="saveTrackerStart()">Save</button>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg-surface);border-radius:var(--radius-sm);border:1px solid var(--border);"><span style="color:var(--text-3);">Weekends</span><strong>Fri &amp; Sat (fixed)</strong></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg-surface);border-radius:var(--radius-sm);border:1px solid var(--border);"><span style="color:var(--text-3);">Ramadan</span><strong style="color:#d8b4fe;">Feb 18–Mar 20, 6h (fixed)</strong></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg-surface);border-radius:var(--radius-sm);border:1px solid var(--border);"><span style="color:var(--text-3);">Normal Hours</span><strong>8h/day (fixed)</strong></div>
+          </div>
+          <div style="margin-top:8px;padding:8px 12px;background:var(--bg-surface);border-radius:var(--radius-sm);border:1px solid var(--border);">
+            <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Category Labels</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+              <div style="display:flex;flex-direction:column;gap:4px;">
+                <label style="font-size:10px;color:var(--text-3);">Support label</label>
+                <div style="display:flex;gap:4px;"><input type="text" id="catLabelSupport" class="form-control" style="font-size:12px;padding:4px 8px;" /><button class="btn btn-primary btn-sm" onclick="saveCatLabel('support')">✓</button></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:4px;">
+                <label style="font-size:10px;color:var(--text-3);">Testing label</label>
+                <div style="display:flex;gap:4px;"><input type="text" id="catLabelTesting" class="form-control" style="font-size:12px;padding:4px 8px;" /><button class="btn btn-primary btn-sm" onclick="saveCatLabel('testing')">✓</button></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:4px;">
+                <label style="font-size:10px;color:var(--text-3);">Project label</label>
+                <div style="display:flex;gap:4px;"><input type="text" id="catLabelProject" class="form-control" style="font-size:12px;padding:4px 8px;" /><button class="btn btn-primary btn-sm" onclick="saveCatLabel('project')">✓</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Project Link Setting -->
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-title-lg">🔗 Project Linking</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-surface);border-radius:var(--radius);border:1px solid var(--border);">
+          <div>
+            <div style="font-size:13px;font-weight:600;">Require project link when logging tasks</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:2px;">When enabled, employees must select a project from the dropdown before submitting a task log.</div>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="projectLinkMandatoryToggle" onchange="saveProjectLinkMandatory(this.checked)"
+              style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;" />
+            <span style="font-size:12px;color:var(--text-2);">Mandatory</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Kuwait Holidays -->
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-title-lg">🇰🇼 Kuwait Public Holidays 2026</div>
+        <p style="color:var(--text-3);font-size:12px;margin-bottom:12px;">⚠️ Approximate Islamic dates. Update <code>KUWAIT_HOLIDAYS_2026</code> in config.js if they differ.</p>
+        <div style="display:flex;flex-direction:column;gap:6px;" id="holidayList"></div>
+      </div>
+
+      <!-- Sub-category management -->
+      <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">🏷️ Sub-Category Management</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;">
+        <div class="card">
+          <div class="card-title-lg" style="color:var(--support);">🛡️ Support</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;">
+            <input type="text" id="newSupportSubcat" class="form-control" placeholder="New sub-category…" />
+            <button class="btn btn-primary btn-sm" onclick="addSubcat('support')">➕</button>
+          </div>
+          <div id="supportSubcatList" style="display:flex;flex-direction:column;gap:6px;min-height:40px;">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title-lg" style="color:var(--testing);">🧪 Testing</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;">
+            <input type="text" id="newTestingSubcat" class="form-control" placeholder="New sub-category…" />
+            <button class="btn btn-primary btn-sm" onclick="addSubcat('testing')">➕</button>
+          </div>
+          <div id="testingSubcatList" style="display:flex;flex-direction:column;gap:6px;min-height:40px;">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title-lg" style="color:var(--project);">🚀 Project</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;">
+            <input type="text" id="newProjectSubcat" class="form-control" placeholder="New sub-category…" />
+            <button class="btn btn-primary btn-sm" onclick="addSubcat('project')">➕</button>
+          </div>
+          <div id="projectSubcatList" style="display:flex;flex-direction:column;gap:6px;min-height:40px;">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Employee Leave -->
+      <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">🏖️ Employee Leave</div>
+      <div class="card">
+        <p style="color:var(--text-2);font-size:13px;margin-bottom:16px;">Enter approved leave date ranges per employee. These specific dates are excluded from their individual working day count and expected hours.</p>
+        <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1.5fr auto;gap:12px;align-items:end;margin-bottom:16px;flex-wrap:wrap;">
+          <div>
+            <label class="form-label">Employee</label>
+            <select id="leaveUserSel" class="form-control"></select>
+          </div>
+          <div>
+            <label class="form-label">From</label>
+            <input type="date" id="leaveStart" class="form-control" />
+          </div>
+          <div>
+            <label class="form-label">To</label>
+            <input type="date" id="leaveEnd" class="form-control" />
+          </div>
+          <div>
+            <label class="form-label">Reason</label>
+            <input type="text" id="leaveReason" class="form-control" placeholder="Annual leave, sick…" />
+          </div>
+          <button class="btn btn-primary" onclick="addLeave()" style="margin-top:auto;">➕ Add</button>
+        </div>
+        <div id="leaveList" style="display:flex;flex-direction:column;gap:8px;">
+          <div class="loading"><div class="spinner"></div> Loading…</div>
+        </div>
+      </div><!-- end Employee Leave card -->
+
+      <!-- Email Configuration -->
+      <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;margin-top:24px;">📧 Email Notifications (EmailJS)</div>
+      <div class="card">
+        <p style="color:var(--text-2);font-size:13px;margin-bottom:6px;line-height:1.6;">
+          Configure <a href="https://emailjs.com" target="_blank" style="color:var(--accent-light);">EmailJS</a> to send email notifications when you assign tasks to employees.
+          Free plan supports 200 emails/month.
+        </p>
+        <p style="color:var(--text-3);font-size:12px;margin-bottom:16px;">
+          Setup: Create account → Add Email Service → Create Template with variables:
+          <code style="background:var(--bg-surface);padding:2px 6px;border-radius:4px;">{{to_email}} {{to_name}} {{from_name}} {{task_title}} {{task_priority}} {{task_due}} {{app_url}}</code>
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
+          <div>
+            <label class="form-label">Service ID</label>
+            <input type="text" id="emailjsServiceId" class="form-control" placeholder="service_xxxxxxx" />
+          </div>
+          <div>
+            <label class="form-label">Template ID</label>
+            <input type="text" id="emailjsTemplateId" class="form-control" placeholder="template_xxxxxxx" />
+          </div>
+          <div>
+            <label class="form-label">Public Key</label>
+            <input type="text" id="emailjsPublicKey" class="form-control" placeholder="Your public key" />
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="saveEmailjsConfig()">💾 Save Email Config</button>
+          <button class="btn btn-secondary btn-sm" onclick="testEmail()">📧 Send Test Email</button>
+          <div style="margin-top:4px;">
+            <label class="form-label" style="margin-bottom:4px;">Test recipient email</label>
+            <input type="email" id="testEmailAddr" class="form-control" placeholder="test@example.com" style="max-width:220px;" />
+          </div>
+        </div>
+        <div id="emailConfigStatus" style="margin-top:12px;font-size:12px;color:var(--text-3);"></div>
+      </div>
+
+      <!-- User Email Management -->
+      <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;margin-top:24px;">👥 User Email Addresses</div>
+      <div class="card">
+        <p style="color:var(--text-2);font-size:13px;margin-bottom:16px;">Set or update the email address for each team member.</p>
+        <div id="userEmailList" style="display:flex;flex-direction:column;gap:8px;">
+          <div class="loading"><div class="spinner"></div> Loading…</div>
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- TAB: PROJECT ANALYTICS -->
+    <div id="tab-project-analytics" class="tab-content" style="display:none;">
+      <div class="page-header" style="margin-bottom:20px;">
+        <div>
+          <h2 class="page-title" style="font-size:18px;">📊 Project Analytics</h2>
+          <p class="page-subtitle">Hours logged per project, employee involvement, and time breakdown.</p>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="loadProjectAnalytics()">🔄 Refresh</button>
+      </div>
+
+      <!-- Summary Cards -->
+      <div id="projAnalyticsSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:24px;"></div>
+
+      <!-- Per-Project Table -->
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-title-lg">📁 Hours by Project</div>
+        <div class="table-wrapper" id="projByProjectTable">
+          <div class="loading"><div class="spinner"></div> Loading…</div>
+        </div>
+      </div>
+
+      <!-- Per-Employee-Per-Project Table -->
+      <div class="card">
+        <div class="card-title-lg">👤 Employee Involvement by Project</div>
+        <div class="table-wrapper" id="projByEmployeeTable">
+          <div class="loading"><div class="spinner"></div> Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: EXPORT -->
+    <div id="tab-export" class="tab-content" style="display:none;">
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-title-lg">🔽 Filter Before Exporting</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-bottom:20px;">
+          <div class="form-group mb-0">
+            <label class="form-label">Employee</label>
+            <select class="form-control" id="exportUserSel"><option value="">All Members</option></select>
+          </div>
+          <div class="form-group mb-0">
+            <label class="form-label">Category</label>
+            <select class="form-control" id="exportCatSel" onchange="onExportCatChange()">
+              <option value="">All Categories</option>
+              <option value="Support">Support</option>
+              <option value="Testing">Testing</option>
+              <option value="Project">Project</option>
+            </select>
+          </div>
+          <div class="form-group mb-0">
+            <label class="form-label">Sub-Category</label>
+            <select class="form-control" id="exportSubcatSel"><option value="">All Sub-Categories</option></select>
+          </div>
+          <div class="form-group mb-0">
+            <label class="form-label">Month</label>
+            <select class="form-control" id="exportMonthSel"><option value="">All Months</option></select>
+          </div>
+          <div class="form-group mb-0">
+            <label class="form-label">From Date</label>
+            <input type="date" class="form-control" id="exportDateFrom" />
+          </div>
+          <div class="form-group mb-0">
+            <label class="form-label">To Date</label>
+            <input type="date" class="form-control" id="exportDateTo" />
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="exportFiltered()">⬇️ Download Filtered CSV</button>
+          <button class="btn btn-secondary btn-sm" onclick="clearExportFilters()">Clear Filters</button>
+          <span id="exportPreviewCount" style="font-size:12px;color:var(--text-3);"></span>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="card">
+          <div class="card-title-lg">📤 Quick Export</div>
+          <p style="color:var(--text-2);font-size:13px;margin-bottom:16px;">Download all logs without any filters applied.</p>
+          <button class="btn btn-secondary" onclick="exportAllCSV()" style="width:100%;justify-content:center;">⬇️ All Logs CSV</button>
+        </div>
+        <div id="exportPreviewCard" class="card" style="display:none;">
+          <div class="card-title-lg">👁️ Preview</div>
+          <div id="exportPreviewTable"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Delete User Modal -->
+<div class="modal-backdrop" id="deleteUserModal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <h2 class="modal-title">🗑️ Delete User</h2>
+      <button class="modal-close" onclick="closeDeleteUserModal()">✕</button>
+    </div>
+    <p style="color:var(--text-2);margin-bottom:8px;">
+      Are you sure you want to permanently delete <strong id="deleteUserName" style="color:var(--text-1)"></strong>?
+    </p>
+    <p id="deleteUserLogCount" style="color:var(--warning);font-size:13px;margin-bottom:24px;"></p>
+    <p style="color:var(--text-3);font-size:12px;margin-bottom:24px;">This action cannot be undone.</p>
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeDeleteUserModal()">Cancel</button>
+      <button class="btn btn-danger" id="confirmDeleteUserBtn" onclick="confirmDeleteUser()">🗑️ Delete User</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal-backdrop" id="resetPassModal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <h2 class="modal-title">🔑 Reset Password</h2>
+      <button class="modal-close" onclick="closeResetPassModal()">✕</button>
+    </div>
+    <p style="color:var(--text-2);margin-bottom:20px;">Set a new password for <strong id="resetPassName" style="color:var(--text-1)"></strong>.</p>
+    <div class="form-group">
+      <label class="form-label">New Password <span class="req">*</span></label>
+      <input type="password" id="resetPassInput" class="form-control" placeholder="Min. 6 characters" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Confirm Password <span class="req">*</span></label>
+      <input type="password" id="resetPassConfirm" class="form-control" placeholder="Repeat new password" />
+    </div>
+    <div class="login-error" id="resetPassError" style="margin-bottom:12px;"></div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeResetPassModal()">Cancel</button>
+      <button class="btn btn-primary" id="resetPassBtn" onclick="saveResetPassword()">🔑 Save Password</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Record Modal (Admin) -->
+<div class="modal-backdrop" id="adminEditModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">✏️ Edit Task Log</h2>
+      <button class="modal-close" onclick="closeAdminEdit()">✕</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Date</label>
+        <input type="date" id="aeDate" class="form-control" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Team Member</label>
+        <input type="text" id="aeMember" class="form-control" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Task / Project</label>
+      <input type="text" id="aeTask" class="form-control" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <textarea id="aeDesc" class="form-control" rows="2"></textarea>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <select id="aeCategory" class="form-control">
+          <option value="Support">Support</option>
+          <option value="Testing">Testing</option>
+          <option value="Project">Project</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hours</label>
+        <input type="number" id="aeHours" class="form-control" min="0.25" max="24" step="0.25" />
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Sub-Category</label>
+        <input type="text" id="aeSubCat" class="form-control" placeholder="e.g. Hardware Testing" />
+      </div>
+      <div class="form-group" style="display:flex;align-items:center;padding-top:26px;">
+        <label class="completed-check">
+          <input type="checkbox" id="aeIsCompleted" />
+          <span>Mark as <strong>Completed</strong></span>
+        </label>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Accomplishment</label>
+      <input type="text" id="aeAccomp" class="form-control" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes</label>
+      <textarea id="aeNotes" class="form-control" rows="2"></textarea>
+    </div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeAdminEdit()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveAdminEdit()">💾 Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/utils.js"></script>
+<script>
+const session = requireAdmin();
+let allUsers = [], allLogs = [], selectedUserId = null, adminEditId = null, appStartDate = null;
+
+async function init() {
+  initTheme(); injectThemeToggle();
+  renderSidebar('admin');
+  loadSidebarStats(session.id);
+  document.getElementById('menuToggle').addEventListener('click', () => {
+    document.getElementById('app-sidebar').classList.toggle('open');
+    document.getElementById('sidebarOverlay').classList.toggle('open');
+  });
+  const [, , sdRes] = await Promise.all([loadUsers(), loadAllLogs(),
+    db.from('app_settings').select('value').eq('key','tracker_start_date').maybeSingle()
+  ]);
+  appStartDate = sdRes?.data?.value || null;
+  renderUserList();
+  populateFilters();
+  renderRecordsTable();
+  renderComparison();
+  setupExportSelects();
+}
+
+async function loadUsers() {
+  const { data } = await db.from('profiles').select('id, username, full_name, role, email, created_at').order('full_name');
+  allUsers = data || [];
+}
+
+async function loadAllLogs() {
+  const { data } = await db.from('task_logs').select('*, profiles(full_name)').order('log_date', { ascending: false });
+  allLogs = data || [];
+}
+
+// ── Tab switching ──────────────────────────────────────────
+const TAB_ORDER = ['users','records','comparison','analysis','export','settings','project-analytics'];
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+  document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`tab-${name}`).style.display = 'block';
+  const idx = TAB_ORDER.indexOf(name);
+  if (idx >= 0) document.querySelectorAll('.admin-tab')[idx].classList.add('active');
+  if (name === 'settings')          loadSettingsTab();
+  if (name === 'project-analytics') loadProjectAnalytics();
+  if (name === 'comparison') {
+    // Reload logs to get latest is_completed values
+    loadAllLogs().then(() => renderComparison());
+  }
+  if (name === 'analysis')   initAnalysisTab();
+  if (name === 'export')     initExportTab();
+}
+
+// ── Settings Tab ───────────────────────────────────────────
+async function loadSettingsTab() {
+  loadWarRangeList();
+  const listEl = document.getElementById('holidayList');
+  if (listEl) {
+    listEl.innerHTML = KUWAIT_HOLIDAYS_2026.map(d => {
+      const dow = new Date(d).toLocaleDateString('en-GB', { weekday: 'long' });
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg-surface);border-radius:var(--radius);border:1px solid var(--border);">
+        <span style="font-size:13px;font-weight:600;">📅 ${KUWAIT_HOLIDAY_LABELS[d]||'Holiday'}</span>
+        <span style="font-size:12px;color:var(--text-3);">${dow}, ${formatDate(d)}</span>
+      </div>`;
+    }).join('');
+  }
+  loadSubcatList('support');
+  loadSubcatList('testing');
+  loadSubcatList('project');
+  populateLeaveUserSelect();
+  loadLeaveList();
+  loadEmailjsConfig();
+  loadUserEmailList();
+
+  // Load tracker start date
+  const startRes = await db.from('app_settings').select('value').eq('key','tracker_start_date').maybeSingle();
+  if (startRes.data) document.getElementById('trackerStartInput').value = startRes.data.value;
+
+  // Load category labels
+  const catRes = await db.from('app_settings').select('key,value').in('key',['category_name_support','category_name_testing','category_name_project']);
+  (catRes.data||[]).forEach(r => {
+    const map = { category_name_support:'catLabelSupport', category_name_testing:'catLabelTesting', category_name_project:'catLabelProject' };
+    const el = document.getElementById(map[r.key]);
+    if (el) el.value = r.value;
+  });
+
+  // Load project_link_mandatory setting
+  const mandRes = await db.from('app_settings').select('value').eq('key','project_link_mandatory').maybeSingle();
+  const mandEl  = document.getElementById('projectLinkMandatoryToggle');
+  if (mandEl) mandEl.checked = mandRes?.data?.value === 'true';
+}
+
+async function addWarRange() {
+  const start = document.getElementById('warRangeStart').value;
+  const end   = document.getElementById('warRangeEnd').value || start;
+  const label = document.getElementById('warRangeLabel').value.trim() || 'War / Conflict';
+  if (!start) { showToast('Select a start date', 'warning'); return; }
+  if (end < start) { showToast('End date must be after start date', 'warning'); return; }
+  const { error } = await db.from('war_day_ranges').insert({ start_date: start, end_date: end, label });
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else {
+    showToast('War date range added ✅', 'success');
+    document.getElementById('warRangeStart').value = '';
+    document.getElementById('warRangeEnd').value   = '';
+    document.getElementById('warRangeLabel').value = '';
+    loadWarRangeList();
+  }
+}
+
+async function loadWarRangeList() {
+  const el = document.getElementById('warRangeList');
+  if (!el) return;
+  const { data, error } = await db.from('war_day_ranges').select('*').order('start_date');
+  if (error) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--danger);">⚠️ Run add_v8_migration.sql in Supabase to enable this feature.</div>';
+    return;
+  }
+  if (!data || !data.length) {
+    el.innerHTML = '<div style="font-size:13px;color:var(--text-3);padding:8px;">No war day ranges added yet.</div>';
+    return;
+  }
+  el.innerHTML = data.map(r => {
+    const same = r.start_date === r.end_date;
+    const dateStr = same ? formatDate(r.start_date) : `${formatDate(r.start_date)} → ${formatDate(r.end_date)}`;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg-surface);border-radius:var(--radius);border:1px solid var(--border);border-left:4px solid var(--danger);">
+      <div>
+        <div style="font-size:13px;font-weight:700;">⚠️ ${r.label}</div>
+        <div style="font-size:12px;color:var(--text-3);margin-top:2px;">📅 ${dateStr}</div>
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="deleteWarRange('${r.id}')">🗑️ Remove</button>
+    </div>`;
+  }).join('');
+}
+
+async function deleteWarRange(id) {
+  if (!confirm('Remove this war date range?')) return;
+  const { error } = await db.from('war_day_ranges').delete().eq('id', id);
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else { showToast('War range removed', 'success'); loadWarRangeList(); }
+}
+
+async function saveTrackerStart() {
+  const val = document.getElementById('trackerStartInput').value;
+  if (!val) { showToast('Pick a date first','warning'); return; }
+  const { error } = await db.from('app_settings').upsert({ key:'tracker_start_date', value:val, label:'Tracker Start Date', updated_by: session.id }, { onConflict:'key' });
+  if (error) showToast('Failed: '+error.message,'error');
+  else showToast('Tracker start date saved! Reload pages to see updated counts.','success');
+}
+
+async function saveCatLabel(cat) {
+  const fieldMap = { support:'catLabelSupport', testing:'catLabelTesting', project:'catLabelProject' };
+  const keyMap   = { support:'category_name_support', testing:'category_name_testing', project:'category_name_project' };
+  const val = document.getElementById(fieldMap[cat])?.value.trim();
+  if (!val) { showToast('Label cannot be empty','warning'); return; }
+  const { error } = await db.from('app_settings').upsert({ key:keyMap[cat], value:val, label:cat+' Category Label', updated_by:session.id }, { onConflict:'key' });
+  if (error) showToast('Failed: '+error.message,'error');
+  else showToast(`"${val}" saved as ${cat} label!`,'success');
+}
+
+// ── Generic Sub-category Management ────────────────────────
+const SUBCAT_TABLES = { support:'support_subcategories', testing:'testing_subcategories', project:'project_subcategories' };
+const SUBCAT_ICONS  = { support:'🛡️', testing:'🧪', project:'🚀' };
+
+async function loadSubcatList(cat) {
+  const el = document.getElementById(cat + 'SubcatList');
+  if (!el) return;
+  const { data } = await db.from(SUBCAT_TABLES[cat]).select('id,name').order('sort_order').order('name');
+  if (!data || !data.length) { el.innerHTML = `<div style="font-size:12px;color:var(--text-3);">None yet.</div>`; return; }
+  el.innerHTML = data.map(s => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg-surface);border-radius:var(--radius-sm);border:1px solid var(--border);">
+      <span style="font-size:13px;font-weight:600;">${SUBCAT_ICONS[cat]} ${s.name}</span>
+      <button class="btn btn-danger btn-sm" onclick="deleteSubcat('${cat}','${s.id}','${s.name.replace(/'/g,"\'")}')">🗑️</button>
+    </div>`).join('');
+}
+
+async function addSubcat(cat) {
+  const input = document.getElementById('new' + cat.charAt(0).toUpperCase() + cat.slice(1) + 'Subcat');
+  const name  = input?.value.trim();
+  if (!name) { showToast('Enter a name', 'warning'); return; }
+  const { error } = await db.from(SUBCAT_TABLES[cat]).insert({ name });
+  if (error) showToast(error.code === '23505' ? 'Already exists' : error.message, 'error');
+  else { showToast(`"${name}" added!`, 'success'); input.value = ''; loadSubcatList(cat); }
+}
+
+async function deleteSubcat(cat, id, name) {
+  if (!confirm(`Remove "${name}"?`)) return;
+  const { error } = await db.from(SUBCAT_TABLES[cat]).delete().eq('id', id);
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else { showToast(`"${name}" removed`, 'success'); loadSubcatList(cat); }
+}
+
+// ── Employee Leave Management ───────────────────────────────
+async function populateLeaveUserSelect() {
+  const sel = document.getElementById('leaveUserSel');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Select employee…</option>';
+  allUsers.forEach(u => sel.appendChild(new Option(u.full_name, u.id)));
+}
+
+async function loadLeaveList() {
+  const el = document.getElementById('leaveList');
+  if (!el) return;
+  const { data } = await db.from('employee_leaves').select('*, profiles(full_name)').order('start_date', { ascending: false });
+  if (!data || !data.length) { el.innerHTML = `<div style="font-size:13px;color:var(--text-3);">No leave entries yet.</div>`; return; }
+  // Group by user
+  const byUser = {};
+  data.forEach(l => {
+    const n = l.profiles?.full_name || l.user_id;
+    if (!byUser[n]) byUser[n] = [];
+    byUser[n].push(l);
+  });
+  el.innerHTML = Object.entries(byUser).map(([name, leaves]) => `
+    <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px;">👤 ${name}</div>
+      ${leaves.map(lv => `
+        <div style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">
+          <span>📅 ${formatDate(lv.start_date)} → ${formatDate(lv.end_date)}</span>
+          ${lv.reason ? `<span style="color:var(--text-3);">${lv.reason}</span>` : ''}
+          <button class="btn btn-danger btn-sm" style="margin-left:auto;" onclick="deleteLeave('${lv.id}')">🗑️</button>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+async function addLeave() {
+  const uid    = document.getElementById('leaveUserSel').value;
+  const start  = document.getElementById('leaveStart').value;
+  const end    = document.getElementById('leaveEnd').value;
+  const reason = document.getElementById('leaveReason').value.trim();
+  if (!uid || !start || !end) { showToast('Select employee and both dates', 'warning'); return; }
+  if (end < start)             { showToast('End date must be after start date', 'warning'); return; }
+  const { error } = await db.from('employee_leaves').insert({ user_id: uid, start_date: start, end_date: end, reason });
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else {
+    showToast('Leave added!', 'success');
+    document.getElementById('leaveUserSel').value = '';
+    document.getElementById('leaveStart').value   = '';
+    document.getElementById('leaveEnd').value     = '';
+    document.getElementById('leaveReason').value  = '';
+    loadLeaveList();
+  }
+}
+
+async function deleteLeave(id) {
+  if (!confirm('Remove this leave entry?')) return;
+  const { error } = await db.from('employee_leaves').delete().eq('id', id);
+  if (error) showToast('Failed: ' + error.message, 'error');
+  else { showToast('Leave removed', 'success'); loadLeaveList(); }
+}
+
+async function saveWarDays() {
+  const btn = document.getElementById('saveWarDaysBtn');
+  const val = parseInt(document.getElementById('warDaysInput').value) || 0;
+  if (val < 0) { showToast('War days cannot be negative', 'warning'); return; }
+
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const { error } = await db
+    .from('app_settings')
+    .upsert({ key: 'war_days_off', value: String(val), label: 'War Days Off (global team deduction)', updated_by: session.id }, { onConflict: 'key' });
+
+  if (error) {
+    showToast('Failed to save: ' + error.message, 'error');
+  } else {
+    showToast(`War days set to ${val} — all team performance pages updated ✅`, 'success');
+    loadSettingsTab();
+  }
+  btn.disabled = false; btn.textContent = '💾 Save Setting';
+}
+
+// ── User Management ────────────────────────────────────────
+async function createUser() {
+  const btn = document.getElementById('createUserBtn');
+  const err = document.getElementById('createError');
+  err.classList.remove('show');
+
+  const fullName = document.getElementById('newFullName').value.trim();
+  const email    = document.getElementById('newEmail').value.trim().toLowerCase();
+  const password = document.getElementById('newPassword').value;
+  const role     = document.getElementById('newRole').value;
+
+  if (!fullName || !email || !password) { err.textContent = 'Full name, email and password are required'; err.classList.add('show'); return; }
+  if (password.length < 6) { err.textContent = 'Password must be at least 6 characters'; err.classList.add('show'); return; }
+
+  btn.disabled = true; btn.textContent = 'Creating…';
+
+  // Create Supabase Auth user
+  const { data: authData, error: authErr } = await db.auth.signUp({
+    email, password,
+    options: { data: { full_name: fullName, role } }
+  });
+
+  if (authErr) {
+    err.textContent = authErr.message;
+    err.classList.add('show');
+    btn.disabled = false; btn.textContent = '⚔️ Create User';
+    return;
+  }
+
+  // Upsert profile (trigger may have already created it)
+  if (authData?.user?.id) {
+    await db.from('profiles').upsert({
+      id: authData.user.id,
+      full_name: fullName,
+      email,
+      role,
+      username: email.split('@')[0]
+    });
+  }
+
+  showToast(`User "${fullName}" created! They can now log in with their email.`, 'success');
+  document.getElementById('newFullName').value = '';
+  document.getElementById('newEmail').value    = '';
+  document.getElementById('newPassword').value = '';
+  await loadUsers();
+  renderUserList();
+  populateFilters();
+  setupExportSelects();
+  btn.disabled = false; btn.textContent = '⚔️ Create User';
+}
+
+function renderUserList() {
+  const container = document.getElementById('userList');
+  if (!allUsers.length) { container.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><div class="empty-text">No users yet</div></div>'; return; }
+
+  container.innerHTML = allUsers.map(u => {
+    const userLogs  = allLogs.filter(l => l.user_id === u.id);
+    const totalHrs  = userLogs.reduce((s, l) => s + parseFloat(l.hours_spent||0), 0);
+    const lvl       = getUserLevel(totalHrs);
+    const initials  = u.full_name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+    const isSelf    = u.id === session.id;
+    return `<div class="user-card">
+      <div class="user-avatar ${lvl.class}" style="width:40px;height:40px;font-size:13px;border-color:${lvl.color};background:linear-gradient(135deg,${lvl.color}33,${lvl.color}11)">${initials}</div>
+      <div class="user-card-info">
+        <div class="user-card-name">${u.full_name}${u.role==='admin'?'<span class="admin-tag">ADMIN</span>':''}</div>
+        <div class="user-card-meta">@${u.username} · ${lvl.icon} ${lvl.name} · ${totalHrs.toFixed(1)}h · ${userLogs.length} tasks</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" onclick="viewUser('${u.id}')">View →</button>
+        ${isSelf ? '' : `<button class="btn btn-secondary btn-sm" title="Reset Password" onclick="openResetPassModal('${u.id}','${u.full_name.replace(/'/g,"\\'")}')">🔑</button>`}
+        ${isSelf ? '' : `<button class="btn btn-danger btn-sm btn-icon" title="Delete" onclick="openDeleteUserModal('${u.id}','${u.full_name.replace(/'/g,"\\'")}')">🗑️</button>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Delete User ────────────────────────────────────────────
+let deletingUserId = null;
+
+function openDeleteUserModal(uid, name) {
+  deletingUserId = uid;
+  document.getElementById('deleteUserName').textContent = name;
+  const logs = allLogs.filter(l => l.user_id === uid).length;
+  document.getElementById('deleteUserLogCount').textContent = logs > 0
+    ? `⚠️ This will also permanently delete their ${logs} task log${logs!==1?'s':''}.`
+    : 'This user has no task logs.';
+  // ── Employee Analysis Tab ──────────────────────────────────
+async function initAnalysisTab() {
+  const sel = document.getElementById('analysisUserSel');
+  if (!sel) return;
+  if (sel.options.length <= 1) {
+    sel.innerHTML = '<option value="">Choose an employee…</option>';
+    allUsers.forEach(u => sel.appendChild(new Option(u.full_name, u.id)));
+  }
+}
+
+async function loadEmployeeAnalysis() {
+  const uid = document.getElementById('analysisUserSel').value;
+  const container = document.getElementById('analysisContent');
+  if (!uid) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🔬</div><div class="empty-text">Select an employee above</div></div>`;
+    return;
+  }
+
+  container.innerHTML = `<div class="loading" style="margin:40px auto;flex-direction:column;gap:12px;"><div class="spinner" style="width:32px;height:32px;border-width:3px;"></div><span style="color:var(--text-3)">Loading analysis…</span></div>`;
+
+  const user = allUsers.find(u => u.id === uid);
+  const [logsRes, leavesRes, warRes] = await Promise.all([
+    db.from('task_logs').select('*').eq('user_id', uid).order('log_date', { ascending: true }),
+    db.from('employee_leaves').select('start_date,end_date').eq('user_id', uid),
+    db.from('war_day_ranges').select('start_date,end_date').order('start_date'),
+  ]);
+
+  const logs      = logsRes.data || [];
+  const leaves    = leavesRes.data || [];
+  const warRanges = warRes.data || [];
+  const wt        = getWorkingDaysInfo(0, leaves, warRanges, appStartDate);
+  const stats     = calculateStats(logs);
+  const level     = getUserLevel(stats.totalHours);
+  const xp        = getXPProgress(stats.totalHours);
+  const badges    = getEarnedBadges(stats);
+  const earnedCount = badges.filter(b=>b.earned).length;
+  const initials  = user.full_name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+  const daysEq    = convertHoursToDays(logs);
+  const hoursPct  = wt.expectedHours > 0 ? Math.min(Math.round((stats.totalHours/wt.expectedHours)*100),999) : 0;
+  const attendPct = wt.workingDays > 0 ? Math.min(Math.round((stats.uniqueDays/wt.workingDays)*100),100) : 0;
+
+  // Team averages
+  const teamStats = allUsers.map(u => {
+    const ul = allLogs.filter(l => l.user_id === u.id);
+    return calculateStats(ul);
+  });
+  const avg = (key) => teamStats.length ? Math.round((teamStats.reduce((s,ts)=>s+ts[key],0)/teamStats.length)*10)/10 : 0;
+
+  const weekData = aggregateByWeek(logs, 10);
+  const thisMonth = getMonthName(new Date());
+  const monthLogs = logs.filter(l => l.month === thisMonth);
+
+  document.getElementById('analysisPeriodInfo').textContent =
+    `${wt.periodLabel} · ${wt.workingDays} working days · ${wt.leaveDays} leave days`;
+
+  container.innerHTML = `
+    <!-- Hero -->
+    <div class="perf-hero" style="margin-bottom:20px;">
+      <div class="hero-avatar ${level.class}" style="border-color:${level.color};background:linear-gradient(135deg,${level.color}33,${level.color}11);">${initials}</div>
+      <div class="hero-info">
+        <div class="hero-name">${user.full_name}</div>
+        <div class="hero-meta">@${user.username} · ${level.icon} ${level.name} · Lv.${level.level} · 🏅 ${earnedCount}/${badges.length} badges</div>
+        <div style="display:flex;align-items:center;gap:16px;margin-top:12px;flex-wrap:wrap;">
+          <div class="level-badge ${level.class}" style="font-size:12px;padding:5px 12px;">${level.icon} ${level.name}</div>
+          <div style="flex:1;max-width:200px;">
+            <div style="font-size:10px;color:var(--text-3);margin-bottom:3px;">XP Progress: ${xp}%</div>
+            <div class="progress-bar"><div class="progress-fill lvl-fill-${level.level}" style="width:${xp}%"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Working time banner -->
+    <div style="background:linear-gradient(135deg,#0d1f3c,#162040);border:1px solid #1e3a5f;border-radius:var(--radius-lg);padding:14px 20px;margin-bottom:20px;font-size:13px;color:var(--text-2);">
+      📅 <strong style="color:var(--text-1)">${wt.periodLabel}</strong> &nbsp;·&nbsp;
+      ${wt.workingDays} working days &nbsp;·&nbsp;
+      ${wt.leaveDays} leave days excluded &nbsp;·&nbsp;
+      ${wt.holidayCount} public holidays &nbsp;·&nbsp;
+      Expected: <strong style="color:var(--text-1)">${wt.expectedHours}h</strong>
+    </div>
+
+    <!-- KPI cards -->
+    <div class="kpi-grid" style="margin-bottom:20px;">
+      <div class="kpi-card accent-purple"><span class="kpi-icon">⏱️</span><div class="kpi-label">Total Hours</div><div class="kpi-value">${stats.totalHours}h</div><div class="kpi-sub">Expected: ${wt.expectedHours}h</div></div>
+      <div class="kpi-card accent-gold"><span class="kpi-icon">📋</span><div class="kpi-label">Total Tasks</div><div class="kpi-value">${stats.totalTasks}</div><div class="kpi-sub">${thisMonth}: ${monthLogs.length}</div></div>
+      <div class="kpi-card accent-teal"><span class="kpi-icon">🔥</span><div class="kpi-label">Current Streak</div><div class="kpi-value">${stats.currentStreak}d</div><div class="kpi-sub">Best: ${stats.maxStreak}d</div></div>
+      <div class="kpi-card accent-blue"><span class="kpi-icon">📅</span><div class="kpi-label">Days Active</div><div class="kpi-value">${stats.uniqueDays}</div><div class="kpi-sub">of ${wt.workingDays} working days</div></div>
+      <div class="kpi-card accent-green"><span class="kpi-icon">🎯</span><div class="kpi-label">Hours Completion</div><div class="kpi-value">${hoursPct}%</div><div class="kpi-sub">${stats.totalHours}h / ${wt.expectedHours}h</div></div>
+      <div class="kpi-card accent-red"><span class="kpi-icon">⚡</span><div class="kpi-label">Peak Day</div><div class="kpi-value">${stats.maxDayHours}h</div><div class="kpi-sub">${daysEq}d equivalent</div></div>
+      <div class="kpi-card accent-green"><span class="kpi-icon">✅</span><div class="kpi-label">Completed Tasks</div><div class="kpi-value">${getCompletedCount(logs)}</div><div class="kpi-sub">Marked as completed</div></div>
+    </div>
+
+    <!-- Team comparison bars -->
+    <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">📊 vs Team Average</div>
+    <div class="card" style="margin-bottom:20px;padding:20px;">
+      ${[
+        { label:'Total Hours',     val:stats.totalHours,         avg:avg('totalHours'),         unit:'h', color:'#6366f1' },
+        { label:'Total Tasks',     val:stats.totalTasks,         avg:avg('totalTasks'),          unit:'',  color:'#10b981' },
+        { label:'Days Active',     val:stats.uniqueDays,         avg:avg('uniqueDays'),          unit:'d', color:'#f59e0b' },
+        { label:'Best Streak',     val:stats.maxStreak,          avg:avg('maxStreak'),           unit:'d', color:'#ef4444' },
+        { label:'Achievements',    val:stats.accomplishmentCount,avg:avg('accomplishmentCount'), unit:'',  color:'#8b5cf6' },
+        { label:'Support Hours',   val:stats.supportHours,       avg:avg('supportHours'),        unit:'h', color:'#3b82f6' },
+        { label:'Testing Hours',   val:stats.testingHours,       avg:avg('testingHours'),        unit:'h', color:'#8b5cf6' },
+        { label:'Project Hours',   val:stats.projectHours,       avg:avg('projectHours'),        unit:'h', color:'#10b981' },
+        { label:'Completed Tasks', val:getCompletedCount(logs), avg:(()=>{const t=allLogs.filter(l=>!!l.is_completed).length; return allUsers.length?Math.round(t/allUsers.length*10)/10:0;})(), unit:'', color:'#059669' },
+      ].map(m => {
+        const maxV  = Math.max(m.val, m.avg, 1);
+        const empPct = Math.round(m.val/maxV*100);
+        const avgPct = Math.round(m.avg/maxV*100);
+        const better = m.val >= m.avg;
+        return `<div style="margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+            <span style="font-weight:600;">${m.label}</span>
+            <span><span style="color:${m.color};font-weight:700;">${m.val}${m.unit}</span> <span style="color:var(--text-3);">vs avg ${m.avg}${m.unit}</span> <span style="color:${better?'var(--success)':'var(--warning)'};">${better?'▲':'▼'}</span></span>
+          </div>
+          <div style="position:relative;height:8px;background:var(--border);border-radius:999px;overflow:visible;margin-bottom:2px;">
+            <div style="height:100%;width:${empPct}%;background:${m.color};border-radius:999px;transition:width .8s;"></div>
+          </div>
+          <div style="position:relative;height:4px;background:var(--border);border-radius:999px;overflow:visible;">
+            <div style="height:100%;width:${avgPct}%;background:var(--text-3);border-radius:999px;opacity:.5;"></div>
+          </div>
+          <div style="display:flex;gap:12px;font-size:10px;color:var(--text-3);margin-top:2px;">
+            <span style="color:${m.color};">■ This employee</span><span>■ Team average</span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-grid" style="margin-bottom:20px;">
+      <div class="chart-card"><div class="card-title">📈 Weekly Hours</div><div class="chart-container"><canvas id="analysisWeeklyChart"></canvas></div></div>
+      <div class="chart-card"><div class="card-title">🍩 Category Split</div><div class="chart-container"><canvas id="analysisCatChart"></canvas></div></div>
+    </div>
+
+    <!-- Badges -->
+    <div class="card">
+      <div class="card-title-lg">🏅 Badges (${earnedCount}/${badges.length})</div>
+      <div class="badges-grid">
+        ${badges.map(b=>`<div class="badge-card ${b.earned?'earned':'locked'}"><span class="badge-emoji">${b.icon}</span><span class="badge-name">${b.name}</span><span class="badge-desc">${b.desc}</span>${b.earned?'<span style="font-size:10px;color:var(--gold);font-weight:700;">EARNED ✨</span>':''}</div>`).join('')}
+      </div>
+    </div>
+  `;
+
+  // Charts
+  requestAnimationFrame(() => {
+    const base = { responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#94a3b8',font:{size:11}}}},
+      scales:{x:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e293b'}},y:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e293b'},beginAtZero:true}} };
+
+    const wCtx = document.getElementById('analysisWeeklyChart');
+    if (wCtx) new Chart(wCtx,{type:'line',data:{labels:weekData.map(w=>w.label),datasets:[{label:'Hours',data:weekData.map(w=>Math.round(w.hours*10)/10),borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,0.1)',fill:true,tension:.4,pointBackgroundColor:'#6366f1',pointRadius:4,borderWidth:2}]},options:base});
+
+    const cCtx = document.getElementById('analysisCatChart');
+    if (cCtx && stats.totalTasks>0) {
+      const catNames = ['Support','Testing','Project'];
+      new Chart(cCtx, {
+        type:'doughnut',
+        data:{
+          labels: catNames,
+          datasets:[{data:[stats.supportCount,stats.testingCount,stats.projectCount],
+            backgroundColor:['rgba(59,130,246,.8)','rgba(139,92,246,.8)','rgba(16,185,129,.8)'],
+            borderColor:['#3b82f6','#8b5cf6','#10b981'],borderWidth:2,hoverOffset:6}]
+        },
+        options:{
+          ...base, cutout:'65%', scales:{},
+          plugins:{...base.plugins,legend:{...base.plugins.legend,position:'bottom'},
+            tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw} tasks`}}
+          },
+          onClick:(evt,elements)=>{
+            if (!elements.length) return;
+            const cat = catNames[elements[0].index];
+            const catLogs = logs.filter(l=>l.category===cat);
+            // Render drill-down table
+            let drillEl = document.getElementById('analysisCatDrill');
+            if (!drillEl) {
+              drillEl = document.createElement('div');
+              drillEl.id = 'analysisCatDrill';
+              drillEl.style.marginTop = '16px';
+              cCtx.closest('.chart-card').appendChild(drillEl);
+            }
+            if (!catLogs.length) { drillEl.innerHTML=`<div style="font-size:12px;color:var(--text-3);padding:8px;">No ${cat} logs.</div>`; return; }
+            drillEl.innerHTML = `
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                <span style="font-size:12px;font-weight:700;">${cat} — ${catLogs.length} entries, ${catLogs.reduce((s,l)=>s+parseFloat(l.hours_spent||0),0).toFixed(1)}h</span>
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('analysisCatDrill').innerHTML=''">✕</button>
+              </div>
+              <div class="table-wrapper">
+                <table><thead><tr><th>Date</th><th>Task</th><th>Sub-Cat</th><th>Hours</th><th>Done</th></tr></thead>
+                <tbody>
+                  ${catLogs.sort((a,b)=>b.log_date.localeCompare(a.log_date)).map(l=>`
+                    <tr>
+                      <td class="td-sm">${formatDate(l.log_date)}</td>
+                      <td>${truncate(l.task_project,35)}</td>
+                      <td style="font-size:11px;color:var(--text-3);">${l.sub_category||'—'}</td>
+                      <td><strong>${parseFloat(l.hours_spent).toFixed(1)}h</strong></td>
+                      <td>${l.is_completed?'<span class="completed-badge">✅</span>':'—'}</td>
+                    </tr>`).join('')}
+                </tbody></table>
+              </div>`;
+            drillEl.scrollIntoView({behavior:'smooth',block:'nearest'});
+          }
+        }
+      });
+    }
+  });
+}
+
+async function initExportTab() {
+  // Populate user filter
+  const exportUserSel = document.getElementById('exportUserSel');
+  if (exportUserSel && exportUserSel.options.length <= 1) {
+    allUsers.forEach(u => {
+      const o = new Option(u.full_name, u.id);
+      exportUserSel.appendChild(o);
+    });
+  }
+  // Populate month filter
+  const exportMonthSel = document.getElementById('exportMonthSel');
+  if (exportMonthSel && exportMonthSel.options.length <= 1) {
+    const months = [...new Set(allLogs.map(l => l.month))].sort((a,b) => {
+      const mo = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      return mo.indexOf(a) - mo.indexOf(b);
+    });
+    months.forEach(m => exportMonthSel.appendChild(new Option(m, m)));
+  }
+  // Load subcats for subcat filter
+  const [s,t,p] = await Promise.all([
+    db.from('support_subcategories').select('name').order('sort_order'),
+    db.from('testing_subcategories').select('name').order('sort_order'),
+    db.from('project_subcategories').select('name').order('sort_order'),
+  ]);
+  exportSubcats = {
+    Support: (s.data||[]).map(r=>r.name),
+    Testing: (t.data||[]).map(r=>r.name),
+    Project: (p.data||[]).map(r=>r.name),
+  };
+  updateExportCount();
+}
+
+// ── Export Tab ──────────────────────────────────────────────
+let exportSubcats = {};
+
+
+
+function onExportCatChange() {
+  const cat = document.getElementById('exportCatSel').value;
+  const sel = document.getElementById('exportSubcatSel');
+  sel.innerHTML = '<option value="">All Sub-Categories</option>';
+  (exportSubcats[cat]||[]).forEach(n => sel.appendChild(new Option(n,n)));
+  updateExportCount();
+}
+
+function getExportFiltered() {
+  const uid    = document.getElementById('exportUserSel').value;
+  const cat    = document.getElementById('exportCatSel').value;
+  const subcat = document.getElementById('exportSubcatSel').value;
+  const month  = document.getElementById('exportMonthSel').value;
+  const from   = document.getElementById('exportDateFrom').value;
+  const to     = document.getElementById('exportDateTo').value;
+  return allLogs.filter(l => {
+    if (uid    && l.user_id      !== uid)    return false;
+    if (cat    && l.category     !== cat)    return false;
+    if (subcat && l.sub_category !== subcat) return false;
+    if (month  && l.month        !== month)  return false;
+    if (from   && l.log_date     < from)     return false;
+    if (to     && l.log_date     > to)       return false;
+    return true;
+  });
+}
+
+function updateExportCount() {
+  const f = getExportFiltered();
+  const el = document.getElementById('exportPreviewCount');
+  if (el) el.textContent = `${f.length} records match current filters`;
+}
+
+['exportUserSel','exportCatSel','exportSubcatSel','exportMonthSel','exportDateFrom','exportDateTo'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', updateExportCount);
+});
+
+function clearExportFilters() {
+  ['exportUserSel','exportCatSel','exportSubcatSel','exportMonthSel'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  ['exportDateFrom','exportDateTo'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('exportSubcatSel').innerHTML = '<option value="">All Sub-Categories</option>';
+  updateExportCount();
+}
+
+function exportFiltered() {
+  const data = getExportFiltered().map(mapLogForExport);
+  if (!data.length) { showToast('No records match your filters', 'warning'); return; }
+  const parts = [];
+  const uid = document.getElementById('exportUserSel').value;
+  if (uid) { const u = allUsers.find(x=>x.id===uid); if (u) parts.push(u.username); }
+  const cat = document.getElementById('exportCatSel').value; if (cat) parts.push(cat.toLowerCase());
+  const month = document.getElementById('exportMonthSel').value; if (month) parts.push(month.toLowerCase());
+  const fname = `worktracker_${parts.join('_')||'filtered'}_${new Date().toISOString().slice(0,10)}.csv`;
+  exportToCSV(data, fname);
+  showToast(`Exported ${data.length} records`, 'success');
+}
+
+// ── Task share donut click ──────────────────────────────────
+document.getElementById('deleteUserModal').classList.add('open');
+}
+
+function closeDeleteUserModal() {
+  // ── Employee Analysis Tab ──────────────────────────────────
+async function initAnalysisTab() {
+  const sel = document.getElementById('analysisUserSel');
+  if (!sel) return;
+  if (sel.options.length <= 1) {
+    sel.innerHTML = '<option value="">Choose an employee…</option>';
+    allUsers.forEach(u => sel.appendChild(new Option(u.full_name, u.id)));
+  }
+}
+
+async function loadEmployeeAnalysis() {
+  const uid = document.getElementById('analysisUserSel').value;
+  const container = document.getElementById('analysisContent');
+  if (!uid) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🔬</div><div class="empty-text">Select an employee above</div></div>`;
+    return;
+  }
+
+  container.innerHTML = `<div class="loading" style="margin:40px auto;flex-direction:column;gap:12px;"><div class="spinner" style="width:32px;height:32px;border-width:3px;"></div><span style="color:var(--text-3)">Loading analysis…</span></div>`;
+
+  const user = allUsers.find(u => u.id === uid);
+  const [logsRes, leavesRes, warRes] = await Promise.all([
+    db.from('task_logs').select('*').eq('user_id', uid).order('log_date', { ascending: true }),
+    db.from('employee_leaves').select('start_date,end_date').eq('user_id', uid),
+    db.from('war_day_ranges').select('start_date,end_date').order('start_date'),
+  ]);
+
+  const logs      = logsRes.data || [];
+  const leaves    = leavesRes.data || [];
+  const warRanges = warRes.data || [];
+  const wt        = getWorkingDaysInfo(0, leaves, warRanges, appStartDate);
+  const stats     = calculateStats(logs);
+  const level     = getUserLevel(stats.totalHours);
+  const xp        = getXPProgress(stats.totalHours);
+  const badges    = getEarnedBadges(stats);
+  const earnedCount = badges.filter(b=>b.earned).length;
+  const initials  = user.full_name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+  const daysEq    = convertHoursToDays(logs);
+  const hoursPct  = wt.expectedHours > 0 ? Math.min(Math.round((stats.totalHours/wt.expectedHours)*100),999) : 0;
+  const attendPct = wt.workingDays > 0 ? Math.min(Math.round((stats.uniqueDays/wt.workingDays)*100),100) : 0;
+
+  // Team averages
+  const teamStats = allUsers.map(u => {
+    const ul = allLogs.filter(l => l.user_id === u.id);
+    return calculateStats(ul);
+  });
+  const avg = (key) => teamStats.length ? Math.round((teamStats.reduce((s,ts)=>s+ts[key],0)/teamStats.length)*10)/10 : 0;
+
+  const weekData = aggregateByWeek(logs, 10);
+  const thisMonth = getMonthName(new Date());
+  const monthLogs = logs.filter(l => l.month === thisMonth);
+
+  document.getElementById('analysisPeriodInfo').textContent =
+    `${wt.periodLabel} · ${wt.workingDays} working days · ${wt.leaveDays} leave days`;
+
+  container.innerHTML = `
+    <!-- Hero -->
+    <div class="perf-hero" style="margin-bottom:20px;">
+      <div class="hero-avatar ${level.class}" style="border-color:${level.color};background:linear-gradient(135deg,${level.color}33,${level.color}11);">${initials}</div>
+      <div class="hero-info">
+        <div class="hero-name">${user.full_name}</div>
+        <div class="hero-meta">@${user.username} · ${level.icon} ${level.name} · Lv.${level.level} · 🏅 ${earnedCount}/${badges.length} badges</div>
+        <div style="display:flex;align-items:center;gap:16px;margin-top:12px;flex-wrap:wrap;">
+          <div class="level-badge ${level.class}" style="font-size:12px;padding:5px 12px;">${level.icon} ${level.name}</div>
+          <div style="flex:1;max-width:200px;">
+            <div style="font-size:10px;color:var(--text-3);margin-bottom:3px;">XP Progress: ${xp}%</div>
+            <div class="progress-bar"><div class="progress-fill lvl-fill-${level.level}" style="width:${xp}%"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Working time banner -->
+    <div style="background:linear-gradient(135deg,#0d1f3c,#162040);border:1px solid #1e3a5f;border-radius:var(--radius-lg);padding:14px 20px;margin-bottom:20px;font-size:13px;color:var(--text-2);">
+      📅 <strong style="color:var(--text-1)">${wt.periodLabel}</strong> &nbsp;·&nbsp;
+      ${wt.workingDays} working days &nbsp;·&nbsp;
+      ${wt.leaveDays} leave days excluded &nbsp;·&nbsp;
+      ${wt.holidayCount} public holidays &nbsp;·&nbsp;
+      Expected: <strong style="color:var(--text-1)">${wt.expectedHours}h</strong>
+    </div>
+
+    <!-- KPI cards -->
+    <div class="kpi-grid" style="margin-bottom:20px;">
+      <div class="kpi-card accent-purple"><span class="kpi-icon">⏱️</span><div class="kpi-label">Total Hours</div><div class="kpi-value">${stats.totalHours}h</div><div class="kpi-sub">Expected: ${wt.expectedHours}h</div></div>
+      <div class="kpi-card accent-gold"><span class="kpi-icon">📋</span><div class="kpi-label">Total Tasks</div><div class="kpi-value">${stats.totalTasks}</div><div class="kpi-sub">${thisMonth}: ${monthLogs.length}</div></div>
+      <div class="kpi-card accent-teal"><span class="kpi-icon">🔥</span><div class="kpi-label">Current Streak</div><div class="kpi-value">${stats.currentStreak}d</div><div class="kpi-sub">Best: ${stats.maxStreak}d</div></div>
+      <div class="kpi-card accent-blue"><span class="kpi-icon">📅</span><div class="kpi-label">Days Active</div><div class="kpi-value">${stats.uniqueDays}</div><div class="kpi-sub">of ${wt.workingDays} working days</div></div>
+      <div class="kpi-card accent-green"><span class="kpi-icon">🎯</span><div class="kpi-label">Hours Completion</div><div class="kpi-value">${hoursPct}%</div><div class="kpi-sub">${stats.totalHours}h / ${wt.expectedHours}h</div></div>
+      <div class="kpi-card accent-red"><span class="kpi-icon">⚡</span><div class="kpi-label">Peak Day</div><div class="kpi-value">${stats.maxDayHours}h</div><div class="kpi-sub">${daysEq}d equivalent</div></div>
+      <div class="kpi-card accent-green"><span class="kpi-icon">✅</span><div class="kpi-label">Completed Tasks</div><div class="kpi-value">${getCompletedCount(logs)}</div><div class="kpi-sub">Marked as completed</div></div>
+    </div>
+
+    <!-- Team comparison bars -->
+    <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">📊 vs Team Average</div>
+    <div class="card" style="margin-bottom:20px;padding:20px;">
+      ${[
+        { label:'Total Hours',     val:stats.totalHours,         avg:avg('totalHours'),         unit:'h', color:'#6366f1' },
+        { label:'Total Tasks',     val:stats.totalTasks,         avg:avg('totalTasks'),          unit:'',  color:'#10b981' },
+        { label:'Days Active',     val:stats.uniqueDays,         avg:avg('uniqueDays'),          unit:'d', color:'#f59e0b' },
+        { label:'Best Streak',     val:stats.maxStreak,          avg:avg('maxStreak'),           unit:'d', color:'#ef4444' },
+        { label:'Achievements',    val:stats.accomplishmentCount,avg:avg('accomplishmentCount'), unit:'',  color:'#8b5cf6' },
+        { label:'Support Hours',   val:stats.supportHours,       avg:avg('supportHours'),        unit:'h', color:'#3b82f6' },
+        { label:'Testing Hours',   val:stats.testingHours,       avg:avg('testingHours'),        unit:'h', color:'#8b5cf6' },
+        { label:'Project Hours',   val:stats.projectHours,       avg:avg('projectHours'),        unit:'h', color:'#10b981' },
+        { label:'Completed Tasks', val:getCompletedCount(logs), avg:(()=>{const t=allLogs.filter(l=>!!l.is_completed).length; return allUsers.length?Math.round(t/allUsers.length*10)/10:0;})(), unit:'', color:'#059669' },
+      ].map(m => {
+        const maxV  = Math.max(m.val, m.avg, 1);
+        const empPct = Math.round(m.val/maxV*100);
+        const avgPct = Math.round(m.avg/maxV*100);
+        const better = m.val >= m.avg;
+        return `<div style="margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+            <span style="font-weight:600;">${m.label}</span>
+            <span><span style="color:${m.color};font-weight:700;">${m.val}${m.unit}</span> <span style="color:var(--text-3);">vs avg ${m.avg}${m.unit}</span> <span style="color:${better?'var(--success)':'var(--warning)'};">${better?'▲':'▼'}</span></span>
+          </div>
+          <div style="position:relative;height:8px;background:var(--border);border-radius:999px;overflow:visible;margin-bottom:2px;">
+            <div style="height:100%;width:${empPct}%;background:${m.color};border-radius:999px;transition:width .8s;"></div>
+          </div>
+          <div style="position:relative;height:4px;background:var(--border);border-radius:999px;overflow:visible;">
+            <div style="height:100%;width:${avgPct}%;background:var(--text-3);border-radius:999px;opacity:.5;"></div>
+          </div>
+          <div style="display:flex;gap:12px;font-size:10px;color:var(--text-3);margin-top:2px;">
+            <span style="color:${m.color};">■ This employee</span><span>■ Team average</span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-grid" style="margin-bottom:20px;">
+      <div class="chart-card"><div class="card-title">📈 Weekly Hours</div><div class="chart-container"><canvas id="analysisWeeklyChart"></canvas></div></div>
+      <div class="chart-card"><div class="card-title">🍩 Category Split</div><div class="chart-container"><canvas id="analysisCatChart"></canvas></div></div>
+    </div>
+
+    <!-- Badges -->
+    <div class="card">
+      <div class="card-title-lg">🏅 Badges (${earnedCount}/${badges.length})</div>
+      <div class="badges-grid">
+        ${badges.map(b=>`<div class="badge-card ${b.earned?'earned':'locked'}"><span class="badge-emoji">${b.icon}</span><span class="badge-name">${b.name}</span><span class="badge-desc">${b.desc}</span>${b.earned?'<span style="font-size:10px;color:var(--gold);font-weight:700;">EARNED ✨</span>':''}</div>`).join('')}
+      </div>
+    </div>
+  `;
+
+  // Charts
+  requestAnimationFrame(() => {
+    const base = { responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#94a3b8',font:{size:11}}}},
+      scales:{x:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e293b'}},y:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e293b'},beginAtZero:true}} };
+
+    const wCtx = document.getElementById('analysisWeeklyChart');
+    if (wCtx) new Chart(wCtx,{type:'line',data:{labels:weekData.map(w=>w.label),datasets:[{label:'Hours',data:weekData.map(w=>Math.round(w.hours*10)/10),borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,0.1)',fill:true,tension:.4,pointBackgroundColor:'#6366f1',pointRadius:4,borderWidth:2}]},options:base});
+
+    const cCtx = document.getElementById('analysisCatChart');
+    if (cCtx && stats.totalTasks>0) {
+      const catNames = ['Support','Testing','Project'];
+      new Chart(cCtx, {
+        type:'doughnut',
+        data:{
+          labels: catNames,
+          datasets:[{data:[stats.supportCount,stats.testingCount,stats.projectCount],
+            backgroundColor:['rgba(59,130,246,.8)','rgba(139,92,246,.8)','rgba(16,185,129,.8)'],
+            borderColor:['#3b82f6','#8b5cf6','#10b981'],borderWidth:2,hoverOffset:6}]
+        },
+        options:{
+          ...base, cutout:'65%', scales:{},
+          plugins:{...base.plugins,legend:{...base.plugins.legend,position:'bottom'},
+            tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw} tasks`}}
+          },
+          onClick:(evt,elements)=>{
+            if (!elements.length) return;
+            const cat = catNames[elements[0].index];
+            const catLogs = logs.filter(l=>l.category===cat);
+            // Render drill-down table
+            let drillEl = document.getElementById('analysisCatDrill');
+            if (!drillEl) {
+              drillEl = document.createElement('div');
+              drillEl.id = 'analysisCatDrill';
+              drillEl.style.marginTop = '16px';
+              cCtx.closest('.chart-card').appendChild(drillEl);
+            }
+            if (!catLogs.length) { drillEl.innerHTML=`<div style="font-size:12px;color:var(--text-3);padding:8px;">No ${cat} logs.</div>`; return; }
+            drillEl.innerHTML = `
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                <span style="font-size:12px;font-weight:700;">${cat} — ${catLogs.length} entries, ${catLogs.reduce((s,l)=>s+parseFloat(l.hours_spent||0),0).toFixed(1)}h</span>
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('analysisCatDrill').innerHTML=''">✕</button>
+              </div>
+              <div class="table-wrapper">
+                <table><thead><tr><th>Date</th><th>Task</th><th>Sub-Cat</th><th>Hours</th><th>Done</th></tr></thead>
+                <tbody>
+                  ${catLogs.sort((a,b)=>b.log_date.localeCompare(a.log_date)).map(l=>`
+                    <tr>
+                      <td class="td-sm">${formatDate(l.log_date)}</td>
+                      <td>${truncate(l.task_project,35)}</td>
+                      <td style="font-size:11px;color:var(--text-3);">${l.sub_category||'—'}</td>
+                      <td><strong>${parseFloat(l.hours_spent).toFixed(1)}h</strong></td>
+                      <td>${l.is_completed?'<span class="completed-badge">✅</span>':'—'}</td>
+                    </tr>`).join('')}
+                </tbody></table>
+              </div>`;
+            drillEl.scrollIntoView({behavior:'smooth',block:'nearest'});
+          }
+        }
+      });
+    }
+  });
+}
+
+// ── Export Tab ──────────────────────────────────────────────
+let exportSubcats = {};
+
+
+
+function onExportCatChange() {
+  const cat = document.getElementById('exportCatSel').value;
+  const sel = document.getElementById('exportSubcatSel');
+  sel.innerHTML = '<option value="">All Sub-Categories</option>';
+  (exportSubcats[cat]||[]).forEach(n => sel.appendChild(new Option(n,n)));
+  updateExportCount();
+}
+
+function getExportFiltered() {
+  const uid    = document.getElementById('exportUserSel').value;
+  const cat    = document.getElementById('exportCatSel').value;
+  const subcat = document.getElementById('exportSubcatSel').value;
+  const month  = document.getElementById('exportMonthSel').value;
+  const from   = document.getElementById('exportDateFrom').value;
+  const to     = document.getElementById('exportDateTo').value;
+  return allLogs.filter(l => {
+    if (uid    && l.user_id      !== uid)    return false;
+    if (cat    && l.category     !== cat)    return false;
+    if (subcat && l.sub_category !== subcat) return false;
+    if (month  && l.month        !== month)  return false;
+    if (from   && l.log_date     < from)     return false;
+    if (to     && l.log_date     > to)       return false;
+    return true;
+  });
+}
+
+function updateExportCount() {
+  const f = getExportFiltered();
+  const el = document.getElementById('exportPreviewCount');
+  if (el) el.textContent = `${f.length} records match current filters`;
+}
+
+['exportUserSel','exportCatSel','exportSubcatSel','exportMonthSel','exportDateFrom','exportDateTo'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', updateExportCount);
+});
+
+function clearExportFilters() {
+  ['exportUserSel','exportCatSel','exportSubcatSel','exportMonthSel'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  ['exportDateFrom','exportDateTo'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('exportSubcatSel').innerHTML = '<option value="">All Sub-Categories</option>';
+  updateExportCount();
+}
+
+function exportFiltered() {
+  const data = getExportFiltered().map(mapLogForExport);
+  if (!data.length) { showToast('No records match your filters', 'warning'); return; }
+  const parts = [];
+  const uid = document.getElementById('exportUserSel').value;
+  if (uid) { const u = allUsers.find(x=>x.id===uid); if (u) parts.push(u.username); }
+  const cat = document.getElementById('exportCatSel').value; if (cat) parts.push(cat.toLowerCase());
+  const month = document.getElementById('exportMonthSel').value; if (month) parts.push(month.toLowerCase());
+  const fname = `worktracker_${parts.join('_')||'filtered'}_${new Date().toISOString().slice(0,10)}.csv`;
+  exportToCSV(data, fname);
+  showToast(`Exported ${data.length} records`, 'success');
+}
+
+// ── Task share donut click ──────────────────────────────────
+document.getElementById('deleteUserModal').classList.remove('open');
+  deletingUserId = null;
+}
+
+async function confirmDeleteUser() {
+  if (!deletingUserId) return;
+  const btn = document.getElementById('confirmDeleteUserBtn');
+  btn.disabled = true; btn.textContent = 'Deleting…';
+
+  // task_logs are cascade-deleted via FK, so just delete the user
+  const { error } = await db.from('profiles').delete().eq('id', deletingUserId);
+
+  if (error) {
+    showToast('Failed to delete user: ' + error.message, 'error');
+  } else {
+    showToast('User deleted successfully', 'success');
+    closeDeleteUserModal();
+    if (selectedUserId === deletingUserId) {
+      document.getElementById('userDetailSection').style.display = 'none';
+      selectedUserId = null;
+    }
+    await Promise.all([loadUsers(), loadAllLogs()]);
+    renderUserList();
+    populateFilters();
+    setupExportSelects();
+  }
+  btn.disabled = false; btn.textContent = '🗑️ Delete User';
+}
+
+async function viewUser(uid) {
+  selectedUserId = uid;
+  const user    = allUsers.find(u => u.id === uid);
+  const logs    = allLogs.filter(l => l.user_id === uid);
+  const stats   = calculateStats(logs);
+  const lvl     = getUserLevel(stats.totalHours);
+  const initials = user.full_name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+
+  const section = document.getElementById('userDetailSection');
+  section.style.display = 'block';
+  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  document.getElementById('userDetailHeader').innerHTML = `
+    <div class="user-avatar ${lvl.class}" style="border-color:${lvl.color};background:linear-gradient(135deg,${lvl.color}33,${lvl.color}11)">${initials}</div>
+    <div>
+      <div style="font-size:18px;font-weight:800;">${user.full_name}</div>
+      <div style="font-size:13px;color:var(--text-2);">@${user.username} · <span class="level-badge ${lvl.class}" style="padding:3px 10px;font-size:12px;">${lvl.icon} ${lvl.name} · Lv.${lvl.level}</span></div>
+    </div>`;
+
+  document.getElementById('userDetailKPIs').innerHTML = `
+    <div class="kpi-card accent-purple"><span class="kpi-icon">⏱️</span><div class="kpi-label">Total Hours</div><div class="kpi-value">${stats.totalHours}h</div></div>
+    <div class="kpi-card accent-gold"><span class="kpi-icon">📋</span><div class="kpi-label">Total Tasks</div><div class="kpi-value">${stats.totalTasks}</div></div>
+    <div class="kpi-card accent-teal"><span class="kpi-icon">🔥</span><div class="kpi-label">Max Streak</div><div class="kpi-value">${stats.maxStreak}d</div></div>
+    <div class="kpi-card accent-green"><span class="kpi-icon">🎯</span><div class="kpi-label">Accomplishment Rate</div><div class="kpi-value">${stats.accomplishmentRate}%</div></div>`;
+
+  document.getElementById('userDetailTitle').textContent = `${user.full_name}'s Records`;
+
+  if (!logs.length) {
+    document.getElementById('userDetailTable').innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">No records yet</div></div>`;
+    return;
+  }
+  document.getElementById('userDetailTable').innerHTML = `
+    <table><thead><tr><th>Date</th><th>Task</th><th>Category</th><th>Hours</th><th>Accomplishment</th><th>Notes</th><th>Action</th></tr></thead>
+    <tbody>
+      ${logs.map(l => `<tr>
+        <td class="td-sm">${formatDate(l.log_date)}</td>
+        <td>${truncate(l.task_project,40)}</td>
+        <td>${categoryBadge(l.category)}<span style='font-size:11px;color:var(--text-3);display:block;margin-top:2px;'>${l.sub_category||''}</span></td>
+        <td><strong>${parseFloat(l.hours_spent).toFixed(1)}h</strong></td>
+        <td class="td-sm">${truncate(l.accomplishment,40)}</td>
+        <td class="td-muted td-sm">${truncate(l.comments_notes,35)}</td>
+        <td><button class="btn btn-secondary btn-sm btn-icon" onclick="openAdminEdit('${l.id}')">✏️</button></td>
+      </tr>`).join('')}
+    </tbody></table>`;
+}
+
+function exportUserCSV() {
+  if (!selectedUserId) return;
+  const user = allUsers.find(u => u.id === selectedUserId);
+  const logs = allLogs.filter(l => l.user_id === selectedUserId).map(l => ({
+    date: l.log_date, member: l.team_member, task: l.task_project,
+    description: l.task_description, category: l.category, hours: l.hours_spent,
+    accomplishment: l.accomplishment, notes: l.comments_notes
+  }));
+  exportToCSV(logs, `${user.username}_logs.csv`);
+}
+
+// ── EmailJS Configuration ──────────────────────────────────
+let emailjsConfig = { serviceId:'', templateId:'', publicKey:'' };
+
+async function loadEmailjsConfig() {
+  const { data } = await db.from('app_settings')
+    .select('key,value')
+    .in('key',['emailjs_service_id','emailjs_template_id','emailjs_public_key']);
+  (data||[]).forEach(r => {
+    const map = { emailjs_service_id:'emailjsServiceId', emailjs_template_id:'emailjsTemplateId', emailjs_public_key:'emailjsPublicKey' };
+    const el = document.getElementById(map[r.key]);
+    if (el) el.value = r.value || '';
+    if (r.key==='emailjs_service_id')  emailjsConfig.serviceId  = r.value||'';
+    if (r.key==='emailjs_template_id') emailjsConfig.templateId = r.value||'';
+    if (r.key==='emailjs_public_key')  emailjsConfig.publicKey  = r.value||'';
+  });
+  if (emailjsConfig.publicKey) {
+    try { emailjs.init({ publicKey: emailjsConfig.publicKey }); } catch(e){}
+  }
+}
+
+async function saveEmailjsConfig() {
+  const sid = document.getElementById('emailjsServiceId').value.trim();
+  const tid = document.getElementById('emailjsTemplateId').value.trim();
+  const pk  = document.getElementById('emailjsPublicKey').value.trim();
+  if (!sid || !tid || !pk) { showToast('Fill in all three EmailJS fields','warning'); return; }
+  const upserts = [
+    { key:'emailjs_service_id',  value:sid, label:'EmailJS Service ID',  updated_by:session.id },
+    { key:'emailjs_template_id', value:tid, label:'EmailJS Template ID',  updated_by:session.id },
+    { key:'emailjs_public_key',  value:pk,  label:'EmailJS Public Key',   updated_by:session.id },
+  ];
+  const { error } = await db.from('app_settings').upsert(upserts, { onConflict:'key' });
+  if (error) { showToast('Failed: '+error.message,'error'); return; }
+  emailjsConfig = { serviceId:sid, templateId:tid, publicKey:pk };
+  try { emailjs.init({ publicKey: pk }); } catch(e){}
+  showToast('EmailJS config saved! ✅','success');
+  document.getElementById('emailConfigStatus').innerHTML =
+    '<span style="color:var(--success);">✅ Config saved. EmailJS is ready to send notifications.</span>';
+}
+
+async function testEmail() {
+  const addr = document.getElementById('testEmailAddr').value.trim();
+  if (!addr) { showToast('Enter a test email address','warning'); return; }
+  if (!emailjsConfig.serviceId || !emailjsConfig.templateId || !emailjsConfig.publicKey) {
+    showToast('Save your EmailJS config first','warning'); return;
+  }
+  try {
+    emailjs.init({ publicKey: emailjsConfig.publicKey });
+    await emailjs.send(emailjsConfig.serviceId, emailjsConfig.templateId, {
+      to_email:      addr,
+      to_name:       'Test User',
+      from_name:     session.fullName,
+      task_title:    'Test Task — EBS Tracker',
+      task_priority: 'High',
+      task_due:      'N/A',
+      app_url:       window.location.origin + '/worktracker/tasks.html',
+    });
+    showToast('Test email sent! Check your inbox ✅','success');
+  } catch(err) {
+    showToast('Failed to send: '+(err?.text||err?.message||JSON.stringify(err)),'error');
+  }
+}
+
+async function sendTaskAssignmentEmail(toUser, taskTitle, taskPriority, taskDue) {
+  if (!emailjsConfig.serviceId || !emailjsConfig.templateId || !emailjsConfig.publicKey) return;
+  if (!toUser.email) return; // No email set for this user
+  try {
+    emailjs.init({ publicKey: emailjsConfig.publicKey });
+    await emailjs.send(emailjsConfig.serviceId, emailjsConfig.templateId, {
+      to_email:      toUser.email,
+      to_name:       toUser.full_name,
+      from_name:     session.fullName,
+      task_title:    taskTitle,
+      task_priority: taskPriority,
+      task_due:      taskDue || 'No due date',
+      app_url:       window.location.origin + '/worktracker/tasks.html',
+    });
+    console.log('Email sent to', toUser.email);
+  } catch(err) {
+    console.warn('Email send failed:', err);
+  }
+}
+
+// ── User Email Management ───────────────────────────────────
+async function loadUserEmailList() {
+  const el = document.getElementById('userEmailList');
+  if (!el) return;
+  const { data } = await db.from('profiles').select('id,full_name,email').order('full_name');
+  if (!data||!data.length) { el.innerHTML='<div style="color:var(--text-3);font-size:13px;">No users found.</div>'; return; }
+  el.innerHTML = data.map(u => `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg-surface);border-radius:var(--radius);border:1px solid var(--border);flex-wrap:wrap;">
+      <span style="font-weight:600;font-size:13px;min-width:140px;">👤 ${u.full_name}</span>
+      <input type="email" id="uemail-${u.id}" class="form-control" value="${u.email||''}" placeholder="user@company.com" style="flex:1;min-width:200px;" />
+      <button class="btn btn-primary btn-sm" onclick="saveUserEmail('${u.id}')">💾 Save</button>
+    </div>`).join('');
+}
+
+async function saveUserEmail(uid) {
+  const val = document.getElementById('uemail-'+uid)?.value.trim() || '';
+  const { error } = await db.from('profiles').update({ email: val }).eq('id', uid);
+  if (error) showToast('Failed: '+error.message,'error');
+  else {
+    showToast('Email saved ✅','success');
+    // Update local cache
+    const u = allUsers.find(x=>x.id===uid);
+    if (u) u.email = val;
+  }
+}
+
+// ── Reset Password ─────────────────────────────────────────
+let resetPassUserId = null;
+
+function openResetPassModal(uid, name) {
+  resetPassUserId = uid;
+  document.getElementById('resetPassName').textContent = name;
+  document.getElementById('resetPassInput').value = '';
+  document.getElementById('resetPassConfirm').value = '';
+  document.getElementById('resetPassError').classList.remove('show');
+  document.getElementById('resetPassModal').classList.add('open');
+}
+function closeResetPassModal() { document.getElementById('resetPassModal').classList.remove('open'); resetPassUserId = null; }
+
+async function saveResetPassword() {
+  const btn = document.getElementById('resetPassBtn');
+  const err = document.getElementById('resetPassError');
+  err.classList.remove('show');
+  const pass    = document.getElementById('resetPassInput').value;
+  const confirm = document.getElementById('resetPassConfirm').value;
+  if (!pass || pass.length < 6) { err.textContent = 'Password must be at least 6 characters'; err.classList.add('show'); return; }
+  if (pass !== confirm)          { err.textContent = 'Passwords do not match'; err.classList.add('show'); return; }
+  btn.disabled = true; btn.textContent = 'Saving…';
+  // Get the user's email from allUsers, then send a Supabase password reset email
+  const targetUser = allUsers.find(u => u.id === resetPassUserId);
+  if (!targetUser?.email) {
+    err.textContent = 'No email on file for this user. Add an email first.';
+    err.classList.add('show');
+    btn.disabled = false; btn.textContent = '🔑 Send Reset Link';
+    return;
+  }
+  const { error } = await db.auth.resetPasswordForEmail(targetUser.email);
+  if (error) { err.textContent = 'Failed: ' + error.message; err.classList.add('show'); }
+  else { showToast('Password reset email sent to ' + targetUser.email + ' 🔑', 'success'); closeResetPassModal(); }
+  btn.disabled = false; btn.textContent = '🔑 Send Reset Link';
+}
+
+// ── Records Tab ────────────────────────────────────────────
+function populateFilters() {
+  const userSelectors = ['recFilterUser', 'exportUserSel'];
+  userSelectors.forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">All Members</option>';
+    allUsers.forEach(u => { const o = new Option(u.full_name, u.id); sel.appendChild(o); });
+  });
+  const months = [...new Set(allLogs.map(l => l.month))];
+  ['recFilterMonth','compMonth','exportMonthSel'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const defaultOpt = id === 'exportMonthSel' ? 'All Months' : (id === 'compMonth' ? 'All Months' : 'All Months');
+    sel.innerHTML = `<option value="">${defaultOpt}</option>`;
+    months.forEach(m => { const o = new Option(m, m); sel.appendChild(o); });
+  });
+  ['recFilterUser','recFilterCat','recFilterMonth','recSearch','recFilterSubcat'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', renderRecordsTable);
+  });
+}
+
+function onRecCatChange() {
+  const cat = document.getElementById('recFilterCat').value;
+  const sel = document.getElementById('recFilterSubcat');
+  sel.innerHTML = '<option value="">All Sub-Categories</option>';
+  const pool = cat ? allLogs.filter(l=>l.category===cat) : allLogs;
+  const subs = [...new Set(pool.map(l=>l.sub_category).filter(Boolean))].sort();
+  subs.forEach(s => sel.appendChild(new Option(s,s)));
+  renderRecords();
+}
+
+function getFilteredRecords() {
+  const uid    = document.getElementById('recFilterUser').value;
+  const cat    = document.getElementById('recFilterCat').value;
+  const subcat = document.getElementById('recFilterSubcat')?.value || '';
+  const month  = document.getElementById('recFilterMonth').value;
+  const search = document.getElementById('recSearch').value.toLowerCase().trim();
+  return allLogs.filter(l => {
+    if (uid    && l.user_id      !== uid)    return false;
+    if (cat    && l.category     !== cat)    return false;
+    if (subcat && l.sub_category !== subcat) return false;
+    if (month  && l.month        !== month)  return false;
+    if (search) {
+      const hay = [l.task_project, l.task_description, l.accomplishment, l.team_member, l.comments_notes].join(' ').toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+}
+
+function clearRecFilters() {
+  ['recFilterUser','recFilterCat','recFilterMonth','recFilterSubcat'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('recSearch').value = '';
+  renderRecordsTable();
+}
+
+function renderRecordsTable() {
+  const logs = getFilteredRecords();
+  document.getElementById('recRowCount').textContent = `${logs.length} records`;
+  const tbody = document.getElementById('recTableBody');
+  if (!logs.length) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">No records found</div></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = logs.map(l => `<tr>
+    <td class="td-sm">${formatDate(l.log_date)}</td>
+    <td><strong>${l.team_member || l.profiles?.full_name || '—'}</strong></td>
+    <td>${truncate(l.task_project, 35)}</td>
+    <td>${categoryBadge(l.category)}<span style='font-size:11px;color:var(--text-3);display:block;margin-top:2px;'>${l.sub_category||''}</span></td>
+    <td><strong>${parseFloat(l.hours_spent).toFixed(1)}h</strong></td>
+    <td class="td-sm">${truncate(l.accomplishment, 35)}</td>
+    <td class="td-muted td-sm">${truncate(l.comments_notes, 30)}</td>
+    <td><button class="btn btn-secondary btn-sm btn-icon" onclick="openAdminEdit('${l.id}')">✏️</button></td>
+  </tr>`).join('');
+}
+
+// ── Comparison Tab ─────────────────────────────────────────
+let compCharts = {};
+let activePeriod = 'all';
+
+function setPeriod(val) {
+  activePeriod = val;
+  document.querySelectorAll('.comp-period-btn').forEach(b => b.classList.toggle('active', b.dataset.val === val));
+  document.getElementById('compMonth').style.display = val === 'month' ? 'block' : 'none';
+  renderComparison();
+}
+
+function destroyCompCharts() {
+  Object.values(compCharts).forEach(c => { try { c.destroy(); } catch(e){} });
+  compCharts = {};
+}
+
+function renderComparison() {
+  destroyCompCharts();
+  const month = document.getElementById('compMonth').value;
+  let filtered = [...allLogs], periodLabel = 'All Time';
+  if (activePeriod === 'month') {
+    const m = month || getMonthName(new Date());
+    filtered = filtered.filter(l => l.month === m);
+    periodLabel = m;
+  } else if (activePeriod === 'week') {
+    filtered = filtered.filter(l => parseInt(l.week_number) === getWeekNumber(new Date()));
+    periodLabel = 'Week ' + getWeekNumber(new Date());
+  }
+  document.getElementById('compPeriodLabel').textContent = filtered.length + ' logs · ' + periodLabel;
+
+  db.from('war_day_ranges').select('start_date,end_date').order('start_date').then(({data: warRanges, error: warErr}) => {
+    const wt = getWorkingDaysInfo(0, [], warErr ? [] : (warRanges || []), appStartDate);
+    const COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4'];
+
+    const userStats = allUsers.map((u, i) => {
+      const logs  = filtered.filter(l => l.user_id === u.id);
+      const stats = calculateStats(logs);
+      const lvl   = getUserLevel(stats.totalHours);
+      const daysEq= convertHoursToDays(logs);
+      const hoursPct  = wt.expectedHours > 0 ? Math.min(Math.round((stats.totalHours / wt.expectedHours) * 100), 999) : 0;
+      const attendPct = wt.workingDays > 0 ? Math.min(Math.round((stats.uniqueDays / wt.workingDays) * 100), 100) : 0;
+      return { user: u, stats, lvl, logs, daysEq, hoursPct, attendPct, wt, color: COLORS[i % COLORS.length] };
+    });
+    const ranked = [...userStats].sort((a,b) => b.stats.totalHours - a.stats.totalHours);
+
+    // ── 1. Spotlight cards ────────────────────────────────
+    const spotlights = [
+      { label:'Most Hours Logged',  icon:'⏱️', color:'#6366f1', get:u=>u.stats.totalHours,        fmt:v=>v+'h' },
+      { label:'Most Tasks Done',    icon:'📋', color:'#10b981', get:u=>u.stats.totalTasks,         fmt:v=>v+''  },
+      { label:'Best Streak',        icon:'🔥', color:'#ef4444', get:u=>u.stats.maxStreak,          fmt:v=>v+'d' },
+      { label:'Most Achievements',  icon:'🎯', color:'#8b5cf6', get:u=>u.stats.accomplishmentCount, fmt:v=>v+' logs' },
+      { label:'Most Days Active',   icon:'📅', color:'#f59e0b', get:u=>u.stats.uniqueDays,         fmt:v=>v+'d' },
+      { label:'Peak Day Hours',     icon:'⚡', color:'#06b6d4', get:u=>u.stats.maxDayHours,        fmt:v=>v+'h' },
+      { label:'Top Support Worker', icon:'🛡️', color:'#3b82f6', get:u=>u.stats.supportHours,      fmt:v=>v+'h' },
+      { label:'Top Project Worker', icon:'🚀', color:'#10b981', get:u=>u.stats.projectHours,       fmt:v=>v+'h' },
+      { label:'Most Completed',    icon:'✅', color:'#059669', get:u=>getCompletedCount(u.logs), fmt:v=>v+' tasks' },
+    ];
+    document.getElementById('compSpotlights').innerHTML = spotlights.map(sp => {
+      const sorted = [...userStats].sort((a,b) => sp.get(b) - sp.get(a));
+      const w = sorted[0], r = sorted[1];
+      if (!w || sp.get(w) === 0) return '';
+      const ini = w.user.full_name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+      return '<div class="spotlight-card" style="border-top:3px solid '+sp.color+';">'
+        + '<div class="sc-glow" style="background:'+sp.color+';position:absolute;top:-20px;right:-20px;width:80px;height:80px;border-radius:50%;opacity:.12;pointer-events:none;"></div>'
+        + '<div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:10px;">'+sp.icon+' '+sp.label+'</div>'
+        + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+        + '<div class="user-avatar '+w.lvl.class+'" style="width:34px;height:34px;font-size:11px;flex-shrink:0;border-color:'+w.lvl.color+';background:linear-gradient(135deg,'+w.lvl.color+'33,'+w.lvl.color+'11);">'+ini+'</div>'
+        + '<div><div style="font-size:13px;font-weight:800;line-height:1.2;">'+w.user.full_name.split(' ')[0]+'</div>'
+        + '<div style="font-size:22px;font-weight:900;color:'+sp.color+';letter-spacing:-1px;line-height:1.1;">'+sp.fmt(sp.get(w))+'</div></div></div>'
+        + (r && sp.get(r) > 0 ? '<div style="font-size:11px;color:var(--text-3);padding-top:8px;border-top:1px solid var(--border);">2nd: <strong style="color:var(--text-2)">'+r.user.full_name.split(' ')[0]+'</strong> · '+sp.fmt(sp.get(r))+'</div>' : '')
+        + '</div>';
+    }).join('');
+
+    // ── 2. Employee profile cards ─────────────────────────
+    const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+    document.getElementById('compProfiles').innerHTML = ranked.map((us, rank) => {
+      const ini = us.user.full_name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+      const xp = getXPProgress(us.stats.totalHours);
+      const ec = getEarnedBadges(us.stats).filter(b=>b.earned).length;
+      return '<div class="emp-profile-card" style="border-top:3px solid '+us.color+';">'
+        + '<div class="emp-profile-top">'
+        + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">'
+        + '<span style="font-size:20px;">'+(medals[rank]||'#'+(rank+1))+'</span>'
+        + '<div class="user-avatar '+us.lvl.class+'" style="width:42px;height:42px;font-size:14px;border-color:'+us.lvl.color+';background:linear-gradient(135deg,'+us.lvl.color+'33,'+us.lvl.color+'11);flex-shrink:0">'+ini+'</div>'
+        + '<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+us.user.full_name+'</div>'
+        + '<div style="font-size:11px;color:'+us.lvl.color+';font-weight:600;">'+us.lvl.icon+' '+us.lvl.name+' · Lv.'+us.lvl.level+' · 🏅'+ec+'</div></div></div>'
+        + '<div style="margin-bottom:4px;display:flex;justify-content:space-between;font-size:10px;color:var(--text-3);"><span>XP to next level</span><span>'+xp+'%</span></div>'
+        + '<div class="progress-bar" style="height:5px;margin-bottom:12px;"><div class="progress-fill lvl-fill-'+us.lvl.level+'" style="width:'+xp+'%"></div></div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;">'
+        + '<div style="padding:6px 10px;background:var(--bg-surface);border-radius:6px;display:flex;justify-content:space-between;"><span style="color:var(--text-3);">🛡️ Support</span><strong>'+us.stats.supportHours+'h</strong></div>'
+        + '<div style="padding:6px 10px;background:var(--bg-surface);border-radius:6px;display:flex;justify-content:space-between;"><span style="color:var(--text-3);">🧪 Testing</span><strong>'+us.stats.testingHours+'h</strong></div>'
+        + '<div style="padding:6px 10px;background:var(--bg-surface);border-radius:6px;display:flex;justify-content:space-between;"><span style="color:var(--text-3);">🚀 Project</span><strong>'+us.stats.projectHours+'h</strong></div>'
+        + '<div style="padding:6px 10px;background:var(--bg-surface);border-radius:6px;display:flex;justify-content:space-between;"><span style="color:var(--text-3);">🔥 Streak</span><strong>'+us.stats.currentStreak+'d</strong></div>'
+        + '</div></div>'
+        + '<div class="emp-profile-stats">'
+        + '<div class="emp-stat-box"><div class="emp-stat-val" style="color:'+us.color+'">'+us.stats.totalHours+'h</div><div class="emp-stat-lbl">Hours</div></div>'
+        + '<div class="emp-stat-box"><div class="emp-stat-val">'+us.stats.totalTasks+'</div><div class="emp-stat-lbl">Tasks</div></div>'
+        + '<div class="emp-stat-box"><div class="emp-stat-val">'+us.stats.accomplishmentCount+'</div><div class="emp-stat-lbl">Achieved</div></div>'
+        + '</div></div>';
+    }).join('');
+
+    // ── 3. Hours vs Expected bars ─────────────────────────
+    document.getElementById('compWorkingTime').innerHTML = ranked.map(us => {
+      const pct=us.hoursPct, def=Math.round((wt.expectedHours-us.stats.totalHours)*10)/10;
+      const sc=pct>=100?'var(--success)':pct>=75?'var(--gold)':'var(--warning)';
+      return '<div style="background:var(--bg-card);border:1px solid var(--border);border-left:4px solid '+us.color+';border-radius:var(--radius-lg);padding:14px 20px;">'
+        +'<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">'
+        +'<div style="font-weight:700;font-size:13px;min-width:130px;">'+us.user.full_name+'</div>'
+        +'<div style="flex:1;min-width:180px;">'
+        +'<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:5px;"><span style="color:var(--text-3);">'+us.stats.totalHours+'h logged / '+wt.expectedHours+'h expected</span><span style="font-weight:800;color:'+sc+';">'+pct+'%</span></div>'
+        +'<div style="height:10px;background:var(--border);border-radius:999px;overflow:hidden;"><div style="height:100%;width:'+Math.min(pct,100)+'%;background:'+us.color+';border-radius:999px;"></div></div></div>'
+        +'<div style="display:flex;gap:8px;font-size:11px;flex-wrap:wrap;">'
+        +'<span style="padding:3px 10px;border-radius:999px;background:var(--bg-surface);border:1px solid var(--border);">📅 '+us.stats.uniqueDays+'/'+wt.workingDays+'d</span>'
+        +'<span style="padding:3px 10px;border-radius:999px;background:var(--bg-surface);border:1px solid var(--border);">📊 '+us.daysEq+'d equiv</span>'
+        +'<span style="padding:3px 10px;border-radius:999px;background:var(--bg-surface);border:1px solid '+(def<=0?'rgba(16,185,129,.4)':'rgba(245,158,11,.3)')+';color:'+(def<=0?'var(--success)':'var(--warning)')+';">'+(def>0?'−'+def+'h left':'✅ Met')+'</span>'
+        +'</div></div></div>';
+    }).join('');
+
+    // ── 4a. Radar — normalize per axis, real values in tooltip ─
+    const radarCtx = document.getElementById('compRadarChart');
+    if (radarCtx) {
+      // Real values per dimension
+      const realVals = userStats.map(us => [
+        us.stats.totalHours,
+        us.stats.totalTasks,
+        us.stats.maxStreak,
+        us.stats.accomplishmentCount,
+        us.stats.uniqueDays,
+        Math.round(us.hoursPct * 10) / 10,
+      ]);
+      const labels = ['Hours','Tasks','Best Streak','Achievements','Days Active','Hours %'];
+      const units  = ['h','','d','','d','%'];
+      // Per-axis max for normalization
+      const axisMax = labels.map((_, ai) => Math.max(...realVals.map(rv => rv[ai]), 1));
+      // Normalized 0-100 per axis
+      const normVals = realVals.map(rv => rv.map((v, ai) => Math.round(v / axisMax[ai] * 100)));
+
+      compCharts.radar = new Chart(radarCtx, {
+        type: 'radar',
+        data: {
+          labels,
+          datasets: userStats.map((us, i) => ({
+            label: us.user.full_name.split(' ')[0],
+            data:  normVals[i],
+            borderColor:      COLORS[i % COLORS.length],
+            backgroundColor:  COLORS[i % COLORS.length] + '22',
+            pointBackgroundColor: COLORS[i % COLORS.length],
+            borderWidth: 2, pointRadius: 4,
+          }))
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#94a3b8', font: { size: 11 } }, position: 'bottom' },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const ai  = ctx.dataIndex;
+                  const ui  = ctx.datasetIndex;
+                  const real = realVals[ui][ai];
+                  return ` ${ctx.dataset.label}: ${real}${units[ai]}`;
+                }
+              }
+            }
+          },
+          scales: {
+            r: {
+              min: 0, max: 100,
+              ticks: { display: false },
+              grid: { color: '#1e2d4a' },
+              pointLabels: { color: '#94a3b8', font: { size: 10 } },
+              angleLines: { color: '#1e2d4a' }
+            }
+          }
+        }
+      });
+    }
+
+    // ── 4b. Horizontal stacked bar ────────────────────────
+    const catCtx = document.getElementById('compCategoryChart');
+    if (catCtx) {
+      compCharts.cat = new Chart(catCtx, {
+        type: 'bar',
+        data: {
+          labels: userStats.map(us=>us.user.full_name.split(' ')[0]),
+          datasets: [
+            {label:'🛡️ Support', data:userStats.map(us=>us.stats.supportHours), backgroundColor:'rgba(59,130,246,.85)', borderRadius:4},
+            {label:'🧪 Testing', data:userStats.map(us=>us.stats.testingHours), backgroundColor:'rgba(139,92,246,.85)'},
+            {label:'🚀 Project', data:userStats.map(us=>us.stats.projectHours), backgroundColor:'rgba(16,185,129,.85)'},
+          ]
+        },
+        options: {
+          indexAxis:'y', responsive:true, maintainAspectRatio:false,
+          plugins:{
+            legend:{labels:{color:'#94a3b8',font:{size:11}},position:'bottom'},
+            tooltip:{callbacks:{label: ctx=>`${ctx.dataset.label.replace(/[^\w\s]/gi,'').trim()}: ${ctx.raw}h`}}
+          },
+          scales:{
+            x:{stacked:true,ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e293b'},beginAtZero:true},
+            y:{stacked:true,ticks:{color:'#94a3b8',font:{size:11}},grid:{display:false}}
+          },
+          onClick: (evt, elements) => {
+            if (!elements.length) return;
+            const el        = elements[0];
+            const catLabels = ['Support','Testing','Project'];
+            const category  = catLabels[el.datasetIndex];
+            const userStat  = userStats[el.index];
+            if (!userStat || !category) return;
+            showDrillDown(userStat, category, filtered, periodLabel);
+          }
+        }
+      });
+    }
+
+    // expose filtered & periodLabel for drill-down closure
+    compCharts._filtered     = filtered;
+    compCharts._periodLabel  = periodLabel;
+    compCharts._userStats    = userStats;
+
+    // ── 5a. Multi-line weekly ─────────────────────────────
+    const weekCtx = document.getElementById('compWeeklyChart');
+    if (weekCtx) {
+      const wl=[];for(let i=9;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i*7);wl.push('W'+getWeekNumber(d));}
+      compCharts.weekly=new Chart(weekCtx,{type:'line',
+        data:{labels:wl,datasets:userStats.map((us,i)=>{const wd=aggregateByWeek(us.logs,10);return{label:us.user.full_name.split(' ')[0],data:wd.map(w=>Math.round(w.hours*10)/10),borderColor:COLORS[i%COLORS.length],backgroundColor:'transparent',tension:.4,pointBackgroundColor:COLORS[i%COLORS.length],pointRadius:4,borderWidth:2};})},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#94a3b8',font:{size:11}},position:'bottom'}},
+          scales:{x:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e293b'}},y:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e293b'},beginAtZero:true}}}});
+    }
+
+    // ── 5b. Task share donut ──────────────────────────────
+    const donutCtx = document.getElementById('compTaskDonut');
+    if (donutCtx && userStats.some(us=>us.stats.totalTasks>0)) {
+      compCharts.donut = new Chart(donutCtx, {
+        type:'doughnut',
+        data:{labels:userStats.map(us=>us.user.full_name.split(' ')[0]),datasets:[{data:userStats.map(us=>us.stats.totalTasks),backgroundColor:COLORS.slice(0,userStats.length),borderColor:'#0f1629',borderWidth:3,hoverOffset:8}]},
+        options:{
+          responsive:true, maintainAspectRatio:false, cutout:'60%',
+          plugins:{legend:{labels:{color:'#94a3b8',font:{size:11}},position:'bottom'}},
+          onClick:(evt,elements)=>{
+            if (!elements.length) return;
+            const us = userStats[elements[0].index];
+            if (!us) return;
+            const sec   = document.getElementById('donutDrillSection');
+            const title = document.getElementById('donutDrillTitle');
+            const body  = document.getElementById('donutDrillBody');
+            const logs  = filtered.filter(l=>l.user_id===us.user.id);
+            title.textContent = `📋 ${us.user.full_name}'s Tasks (${periodLabel})`;
+            if (!logs.length) {
+              body.innerHTML = `<tr><td colspan="5"><div class="empty-state" style="padding:20px;"><div class="empty-icon">📭</div><div class="empty-text">No tasks in this period</div></div></td></tr>`;
+            } else {
+              body.innerHTML = logs.sort((a,b)=>b.log_date.localeCompare(a.log_date)).map(l=>`
+                <tr>
+                  <td class="td-sm">${formatDate(l.log_date)}</td>
+                  <td>${truncate(l.task_project,40)}</td>
+                  <td>${categoryBadge(l.category)}<span style="font-size:11px;color:var(--text-3);margin-left:4px;">${l.sub_category||''}</span></td>
+                  <td><strong>${parseFloat(l.hours_spent).toFixed(1)}h</strong></td>
+                  <td class="td-sm td-muted">${truncate(l.accomplishment,40)}</td>
+                </tr>`).join('');
+            }
+            sec.style.display='block';
+            sec.scrollIntoView({behavior:'smooth',block:'start'});
+          }
+        }
+      });
+    }
+
+    // ── 6. Full metrics table ─────────────────────────────
+    const allMetrics=[
+      {label:'⏱️ Total Hours',      get:u=>u.stats.totalHours,         fmt:v=>v+'h'},
+      {label:'📅 Days Equivalent',  get:u=>u.daysEq,                   fmt:v=>v+'d'},
+      {label:'📋 Total Tasks',       get:u=>u.stats.totalTasks,         fmt:v=>v+''},
+      {label:'🛡️ Support Hours',    get:u=>u.stats.supportHours,       fmt:v=>v+'h'},
+      {label:'🧪 Testing Hours',    get:u=>u.stats.testingHours,       fmt:v=>v+'h'},
+      {label:'🚀 Project Hours',    get:u=>u.stats.projectHours,       fmt:v=>v+'h'},
+      {label:'🛡️ Support Tasks',    get:u=>u.stats.supportCount,       fmt:v=>v+''},
+      {label:'🧪 Testing Tasks',    get:u=>u.stats.testingCount,       fmt:v=>v+''},
+      {label:'🚀 Project Tasks',    get:u=>u.stats.projectCount,       fmt:v=>v+''},
+      {label:'🗓️ Days Active',      get:u=>u.stats.uniqueDays,         fmt:v=>v+'d'},
+      {label:'📊 Attendance Rate',  get:u=>u.attendPct,                fmt:v=>v+'%'},
+      {label:'🎯 Hours Completion', get:u=>u.hoursPct,                 fmt:v=>v+'%'},
+      {label:'🔥 Current Streak',   get:u=>u.stats.currentStreak,      fmt:v=>v+'d'},
+      {label:'🏆 Best Streak',      get:u=>u.stats.maxStreak,          fmt:v=>v+'d'},
+      {label:'⚡ Peak Day Hours',   get:u=>u.stats.maxDayHours,        fmt:v=>v+'h'},
+      {label:'✅ Achievements',       get:u=>u.stats.accomplishmentCount, fmt:v=>v+' logs'},
+      {label:'☑️ Completed Tasks',    get:u=>getCompletedCount(u.logs),   fmt:v=>v+' tasks'},
+    ];
+    document.getElementById('compHead').innerHTML='<tr><th style="text-align:left;min-width:180px;">Metric</th>'
+      +userStats.map((us,i)=>'<th style="text-align:center;min-width:90px;border-bottom:2px solid '+COLORS[i%COLORS.length]+';">'+us.user.full_name.split(' ')[0]+'<br><span style="font-size:10px;color:'+us.lvl.color+';font-weight:600;">'+us.lvl.icon+' Lv.'+us.lvl.level+'</span></th>').join('')
+      +'<th style="text-align:center;min-width:70px;color:var(--gold);">👑 Best</th></tr>';
+    document.getElementById('compBody').innerHTML=allMetrics.map(m=>{
+      const vals=userStats.map(us=>m.get(us)),max=Math.max(...vals),winner=userStats[vals.indexOf(max)];
+      return '<tr><td style="font-weight:600;font-size:12px;padding:9px 16px;color:var(--text-2);">'+m.label+'</td>'
+        +vals.map((v,i)=>{const isMax=v===max&&max>0;return '<td style="text-align:center;padding:9px 16px;font-size:13px;'+(isMax?'font-weight:800;color:'+COLORS[i%COLORS.length]+';background:'+COLORS[i%COLORS.length]+'18;':'')+'">'+(isMax?'👑 ':'')+m.fmt(v)+'</td>';}).join('')
+        +'<td style="text-align:center;padding:9px 16px;font-size:12px;font-weight:700;color:var(--gold);">'+(max>0?winner.user.full_name.split(' ')[0]:'—')+'</td></tr>';
+    }).join('');
+  });
+}
+
+
+// ── Drill-Down ─────────────────────────────────────────────
+function showDrillDown(userStat, category, filtered, periodLabel) {
+  const logs = filtered.filter(l => l.user_id === userStat.user.id && l.category === category);
+  const section = document.getElementById('drillDownSection');
+  const title   = document.getElementById('drillDownTitle');
+  const body    = document.getElementById('drillDownBody');
+
+  title.textContent = `${category} — ${userStat.user.full_name} (${periodLabel})`;
+
+  if (!logs.length) {
+    body.innerHTML = `<tr><td colspan="5"><div class="empty-state" style="padding:24px;"><div class="empty-icon">📭</div><div class="empty-text">No ${category} logs in this period</div></div></td></tr>`;
+  } else {
+    const totalHours = logs.reduce((s,l)=>s+parseFloat(l.hours_spent||0),0);
+    // Group by sub_category for a mini summary
+    const subcatSummary = {};
+    logs.forEach(l => {
+      const sc = l.sub_category || category;
+      if (!subcatSummary[sc]) subcatSummary[sc] = 0;
+      subcatSummary[sc] += parseFloat(l.hours_spent||0);
+    });
+    const summaryHtml = Object.entries(subcatSummary)
+      .sort((a,b)=>b[1]-a[1])
+      .map(([sc,h])=>`<span style="padding:3px 10px;border-radius:999px;background:var(--bg-surface);border:1px solid var(--border);font-size:11px;font-weight:600;">${sc}: ${h.toFixed(1)}h</span>`)
+      .join('');
+
+    body.innerHTML = `
+      <tr><td colspan="5" style="padding:10px 16px;background:var(--bg-surface);border-bottom:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <span style="font-size:12px;font-weight:700;">${logs.length} entries · ${totalHours.toFixed(1)}h total</span>
+          ${summaryHtml}
+        </div>
+      </td></tr>
+      ${logs.sort((a,b)=>b.log_date.localeCompare(a.log_date)).map(l=>`
+        <tr>
+          <td class="td-sm">${formatDate(l.log_date)}</td>
+          <td>${truncate(l.task_project,40)}</td>
+          <td><span style="font-size:12px;color:var(--text-2);">${l.sub_category||'—'}</span></td>
+          <td><strong>${parseFloat(l.hours_spent).toFixed(1)}h</strong></td>
+          <td class="td-sm td-muted">${truncate(l.accomplishment,45)}</td>
+        </tr>`).join('')}`;
+  }
+
+  section.style.display = 'block';
+  section.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function closeDrillDown() {
+  document.getElementById('drillDownSection').style.display = 'none';
+}
+
+// ── Export Tab ─────────────────────────────────────────────
+function setupExportSelects() {
+  const exportUserSel = document.getElementById('exportUserSel');
+  if (exportUserSel) {
+    exportUserSel.innerHTML = '<option value="">Select Member</option>';
+    allUsers.forEach(u => { const o = new Option(u.full_name, u.id); exportUserSel.appendChild(o); });
+  }
+}
+
+function mapLogForExport(l) {
+  const user = allUsers.find(u => u.id === l.user_id);
+  return {
+    date: l.log_date, week: l.week_number, month: l.month,
+    team_member: l.team_member || user?.full_name || '', 
+    task_project: l.task_project, description: l.task_description,
+    category: l.category, sub_category: l.sub_category || '', hours_spent: l.hours_spent,
+    accomplishment: l.accomplishment, notes: l.comments_notes,
+    is_completed: l.is_completed ? 'Yes' : 'No',
+  };
+}
+
+function exportAllCSV() {
+  exportToCSV(allLogs.map(mapLogForExport), `worktracker_all_logs_${new Date().toISOString().slice(0,10)}.csv`);
+  showToast('Exported all logs!', 'success');
+}
+
+function exportSelectedUserCSV() {
+  const uid = document.getElementById('exportUserSel').value;
+  if (!uid) { showToast('Please select a user first', 'warning'); return; }
+  const user = allUsers.find(u => u.id === uid);
+  const logs = allLogs.filter(l => l.user_id === uid).map(mapLogForExport);
+  exportToCSV(logs, `${user.username}_logs_${new Date().toISOString().slice(0,10)}.csv`);
+  showToast(`Exported ${user.full_name}'s logs!`, 'success');
+}
+
+function exportMonthCSV() {
+  const month = document.getElementById('exportMonthSel').value;
+  const logs  = (month ? allLogs.filter(l => l.month === month) : allLogs).map(mapLogForExport);
+  exportToCSV(logs, `worktracker_${month || 'all'}_${new Date().toISOString().slice(0,10)}.csv`);
+  showToast('Exported month logs!', 'success');
+}
+
+// ── Admin Edit Modal ───────────────────────────────────────
+function openAdminEdit(id) {
+  const log = allLogs.find(l => l.id === id);
+  if (!log) return;
+  adminEditId = id;
+  document.getElementById('aeDate').value     = log.log_date;
+  document.getElementById('aeMember').value   = log.team_member;
+  document.getElementById('aeTask').value     = log.task_project;
+  document.getElementById('aeDesc').value     = log.task_description;
+  document.getElementById('aeCategory').value = log.category;
+  document.getElementById('aeHours').value    = log.hours_spent;
+  document.getElementById('aeAccomp').value       = log.accomplishment;
+  document.getElementById('aeNotes').value        = log.comments_notes;
+  document.getElementById('aeSubCat').value       = log.sub_category || '';
+  document.getElementById('aeIsCompleted').checked = !!log.is_completed;
+  document.getElementById('adminEditModal').classList.add('open');
+}
+function closeAdminEdit() { document.getElementById('adminEditModal').classList.remove('open'); adminEditId = null; }
+
+async function saveAdminEdit() {
+  if (!adminEditId) return;
+  const dateVal = document.getElementById('aeDate').value;
+  const updates = {
+    team_member:      document.getElementById('aeMember').value.trim(),
+    log_date:         dateVal,
+    month:            getMonthName(dateVal),
+    week_number:      getWeekNumber(dateVal),
+    task_project:     document.getElementById('aeTask').value.trim(),
+    task_description: document.getElementById('aeDesc').value.trim(),
+    category:         document.getElementById('aeCategory').value,
+    sub_category:     document.getElementById('aeSubCat').value.trim(),
+    is_completed:     document.getElementById('aeIsCompleted').checked,
+    hours_spent:      parseFloat(document.getElementById('aeHours').value),
+    accomplishment:   document.getElementById('aeAccomp').value.trim(),
+    comments_notes:   document.getElementById('aeNotes').value.trim(),
+  };
+  const { error } = await db.from('task_logs').update(updates).eq('id', adminEditId);
+  if (error) { showToast('Failed to save: ' + error.message, 'error'); }
+  else {
+    showToast('Record updated!', 'success');
+    closeAdminEdit();
+    await loadAllLogs();
+    renderUserList();
+    renderRecordsTable();
+    renderComparison();
+    if (selectedUserId) viewUser(selectedUserId);
+  }
+}
+
+// ── Employee Analysis Tab ──────────────────────────────────
+async function initAnalysisTab() {
+  const sel = document.getElementById('analysisUserSel');
+  if (!sel) return;
+  if (sel.options.length <= 1) {
+    sel.innerHTML = '<option value="">Choose an employee…</option>';
+    allUsers.forEach(u => sel.appendChild(new Option(u.full_name, u.id)));
+  }
+}
+
+async function loadEmployeeAnalysis() {
+  const uid = document.getElementById('analysisUserSel').value;
+  const container = document.getElementById('analysisContent');
+  if (!uid) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🔬</div><div class="empty-text">Select an employee above</div></div>`;
+    return;
+  }
+
+  container.innerHTML = `<div class="loading" style="margin:40px auto;flex-direction:column;gap:12px;"><div class="spinner" style="width:32px;height:32px;border-width:3px;"></div><span style="color:var(--text-3)">Loading analysis…</span></div>`;
+
+  const user = allUsers.find(u => u.id === uid);
+  const [logsRes, leavesRes, warRes] = await Promise.all([
+    db.from('task_logs').select('*').eq('user_id', uid).order('log_date', { ascending: true }),
+    db.from('employee_leaves').select('start_date,end_date').eq('user_id', uid),
+    db.from('war_day_ranges').select('start_date,end_date').order('start_date'),
+  ]);
+
+  const logs      = logsRes.data || [];
+  const leaves    = leavesRes.data || [];
+  const warRanges = warRes.data || [];
+  const wt        = getWorkingDaysInfo(0, leaves, warRanges, appStartDate);
+  const stats     = calculateStats(logs);
+  const level     = getUserLevel(stats.totalHours);
+  const xp        = getXPProgress(stats.totalHours);
+  const badges    = getEarnedBadges(stats);
+  const earnedCount = badges.filter(b=>b.earned).length;
+  const initials  = user.full_name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+  const daysEq    = convertHoursToDays(logs);
+  const hoursPct  = wt.expectedHours > 0 ? Math.min(Math.round((stats.totalHours/wt.expectedHours)*100),999) : 0;
+  const attendPct = wt.workingDays > 0 ? Math.min(Math.round((stats.uniqueDays/wt.workingDays)*100),100) : 0;
+
+  // Team averages
+  const teamStats = allUsers.map(u => {
+    const ul = allLogs.filter(l => l.user_id === u.id);
+    return calculateStats(ul);
+  });
+  const avg = (key) => teamStats.length ? Math.round((teamStats.reduce((s,ts)=>s+ts[key],0)/teamStats.length)*10)/10 : 0;
+
+  const weekData = aggregateByWeek(logs, 10);
+  const thisMonth = getMonthName(new Date());
+  const monthLogs = logs.filter(l => l.month === thisMonth);
+
+  document.getElementById('analysisPeriodInfo').textContent =
+    `${wt.periodLabel} · ${wt.workingDays} working days · ${wt.leaveDays} leave days`;
+
+  container.innerHTML = `
+    <!-- Hero -->
+    <div class="perf-hero" style="margin-bottom:20px;">
+      <div class="hero-avatar ${level.class}" style="border-color:${level.color};background:linear-gradient(135deg,${level.color}33,${level.color}11);">${initials}</div>
+      <div class="hero-info">
+        <div class="hero-name">${user.full_name}</div>
+        <div class="hero-meta">@${user.username} · ${level.icon} ${level.name} · Lv.${level.level} · 🏅 ${earnedCount}/${badges.length} badges</div>
+        <div style="display:flex;align-items:center;gap:16px;margin-top:12px;flex-wrap:wrap;">
+          <div class="level-badge ${level.class}" style="font-size:12px;padding:5px 12px;">${level.icon} ${level.name}</div>
+          <div style="flex:1;max-width:200px;">
+            <div style="font-size:10px;color:var(--text-3);margin-bottom:3px;">XP Progress: ${xp}%</div>
+            <div class="progress-bar"><div class="progress-fill lvl-fill-${level.level}" style="width:${xp}%"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Working time banner -->
+    <div style="background:linear-gradient(135deg,#0d1f3c,#162040);border:1px solid #1e3a5f;border-radius:var(--radius-lg);padding:14px 20px;margin-bottom:20px;font-size:13px;color:var(--text-2);">
+      📅 <strong style="color:var(--text-1)">${wt.periodLabel}</strong> &nbsp;·&nbsp;
+      ${wt.workingDays} working days &nbsp;·&nbsp;
+      ${wt.leaveDays} leave days excluded &nbsp;·&nbsp;
+      ${wt.holidayCount} public holidays &nbsp;·&nbsp;
+      Expected: <strong style="color:var(--text-1)">${wt.expectedHours}h</strong>
+    </div>
+
+    <!-- KPI cards -->
+    <div class="kpi-grid" style="margin-bottom:20px;">
+      <div class="kpi-card accent-purple"><span class="kpi-icon">⏱️</span><div class="kpi-label">Total Hours</div><div class="kpi-value">${stats.totalHours}h</div><div class="kpi-sub">Expected: ${wt.expectedHours}h</div></div>
+      <div class="kpi-card accent-gold"><span class="kpi-icon">📋</span><div class="kpi-label">Total Tasks</div><div class="kpi-value">${stats.totalTasks}</div><div class="kpi-sub">${thisMonth}: ${monthLogs.length}</div></div>
+      <div class="kpi-card accent-teal"><span class="kpi-icon">🔥</span><div class="kpi-label">Current Streak</div><div class="kpi-value">${stats.currentStreak}d</div><div class="kpi-sub">Best: ${stats.maxStreak}d</div></div>
+      <div class="kpi-card accent-blue"><span class="kpi-icon">📅</span><div class="kpi-label">Days Active</div><div class="kpi-value">${stats.uniqueDays}</div><div class="kpi-sub">of ${wt.workingDays} working days</div></div>
+      <div class="kpi-card accent-green"><span class="kpi-icon">🎯</span><div class="kpi-label">Hours Completion</div><div class="kpi-value">${hoursPct}%</div><div class="kpi-sub">${stats.totalHours}h / ${wt.expectedHours}h</div></div>
+      <div class="kpi-card accent-red"><span class="kpi-icon">⚡</span><div class="kpi-label">Peak Day</div><div class="kpi-value">${stats.maxDayHours}h</div><div class="kpi-sub">${daysEq}d equivalent</div></div>
+      <div class="kpi-card accent-green"><span class="kpi-icon">✅</span><div class="kpi-label">Completed Tasks</div><div class="kpi-value">${getCompletedCount(logs)}</div><div class="kpi-sub">Marked as completed</div></div>
+    </div>
+
+    <!-- Team comparison bars -->
+    <div style="font-size:11px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">📊 vs Team Average</div>
+    <div class="card" style="margin-bottom:20px;padding:20px;">
+      ${[
+        { label:'Total Hours',     val:stats.totalHours,         avg:avg('totalHours'),         unit:'h', color:'#6366f1' },
+        { label:'Total Tasks',     val:stats.totalTasks,         avg:avg('totalTasks'),          unit:'',  color:'#10b981' },
+        { label:'Days Active',     val:stats.uniqueDays,         avg:avg('uniqueDays'),          unit:'d', color:'#f59e0b' },
+        { label:'Best Streak',     val:stats.maxStreak,          avg:avg('maxStreak'),           unit:'d', color:'#ef4444' },
+        { label:'Achievements',    val:stats.accomplishmentCount,avg:avg('accomplishmentCount'), unit:'',  color:'#8b5cf6' },
+        { label:'Support Hours',   val:stats.supportHours,       avg:avg('supportHours'),        unit:'h', color:'#3b82f6' },
+        { label:'Testing Hours',   val:stats.testingHours,       avg:avg('testingHours'),        unit:'h', color:'#8b5cf6' },
+        { label:'Project Hours',   val:stats.projectHours,       avg:avg('projectHours'),        unit:'h', color:'#10b981' },
+        { label:'Completed Tasks', val:getCompletedCount(logs), avg:(()=>{const t=allLogs.filter(l=>!!l.is_completed).length; return allUsers.length?Math.round(t/allUsers.length*10)/10:0;})(), unit:'', color:'#059669' },
+      ].map(m => {
+        const maxV  = Math.max(m.val, m.avg, 1);
+        const empPct = Math.round(m.val/maxV*100);
+        const avgPct = Math.round(m.avg/maxV*100);
+        const better = m.val >= m.avg;
+        return `<div style="margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+            <span style="font-weight:600;">${m.label}</span>
+            <span><span style="color:${m.color};font-weight:700;">${m.val}${m.unit}</span> <span style="color:var(--text-3);">vs avg ${m.avg}${m.unit}</span> <span style="color:${better?'var(--success)':'var(--warning)'};">${better?'▲':'▼'}</span></span>
+          </div>
+          <div style="position:relative;height:8px;background:var(--border);border-radius:999px;overflow:visible;margin-bottom:2px;">
+            <div style="height:100%;width:${empPct}%;background:${m.color};border-radius:999px;transition:width .8s;"></div>
+          </div>
+          <div style="position:relative;height:4px;background:var(--border);border-radius:999px;overflow:visible;">
+            <div style="height:100%;width:${avgPct}%;background:var(--text-3);border-radius:999px;opacity:.5;"></div>
+          </div>
+          <div style="display:flex;gap:12px;font-size:10px;color:var(--text-3);margin-top:2px;">
+            <span style="color:${m.color};">■ This employee</span><span>■ Team average</span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-grid" style="margin-bottom:20px;">
+      <div class="chart-card"><div class="card-title">📈 Weekly Hours</div><div class="chart-container"><canvas id="analysisWeeklyChart"></canvas></div></div>
+      <div class="chart-card"><div class="card-title">🍩 Category Split</div><div class="chart-container"><canvas id="analysisCatChart"></canvas></div></div>
+    </div>
+
+    <!-- Badges -->
+    <div class="card">
+      <div class="card-title-lg">🏅 Badges (${earnedCount}/${badges.length})</div>
+      <div class="badges-grid">
+        ${badges.map(b=>`<div class="badge-card ${b.earned?'earned':'locked'}"><span class="badge-emoji">${b.icon}</span><span class="badge-name">${b.name}</span><span class="badge-desc">${b.desc}</span>${b.earned?'<span style="font-size:10px;color:var(--gold);font-weight:700;">EARNED ✨</span>':''}</div>`).join('')}
+      </div>
+    </div>
+  `;
+
+  // Charts
+  requestAnimationFrame(() => {
+    const base = { responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#94a3b8',font:{size:11}}}},
+      scales:{x:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e293b'}},y:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e293b'},beginAtZero:true}} };
+
+    const wCtx = document.getElementById('analysisWeeklyChart');
+    if (wCtx) new Chart(wCtx,{type:'line',data:{labels:weekData.map(w=>w.label),datasets:[{label:'Hours',data:weekData.map(w=>Math.round(w.hours*10)/10),borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,0.1)',fill:true,tension:.4,pointBackgroundColor:'#6366f1',pointRadius:4,borderWidth:2}]},options:base});
+
+    const cCtx = document.getElementById('analysisCatChart');
+    if (cCtx && stats.totalTasks>0) {
+      const catNames = ['Support','Testing','Project'];
+      new Chart(cCtx, {
+        type:'doughnut',
+        data:{
+          labels: catNames,
+          datasets:[{data:[stats.supportCount,stats.testingCount,stats.projectCount],
+            backgroundColor:['rgba(59,130,246,.8)','rgba(139,92,246,.8)','rgba(16,185,129,.8)'],
+            borderColor:['#3b82f6','#8b5cf6','#10b981'],borderWidth:2,hoverOffset:6}]
+        },
+        options:{
+          ...base, cutout:'65%', scales:{},
+          plugins:{...base.plugins,legend:{...base.plugins.legend,position:'bottom'},
+            tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw} tasks`}}
+          },
+          onClick:(evt,elements)=>{
+            if (!elements.length) return;
+            const cat = catNames[elements[0].index];
+            const catLogs = logs.filter(l=>l.category===cat);
+            // Render drill-down table
+            let drillEl = document.getElementById('analysisCatDrill');
+            if (!drillEl) {
+              drillEl = document.createElement('div');
+              drillEl.id = 'analysisCatDrill';
+              drillEl.style.marginTop = '16px';
+              cCtx.closest('.chart-card').appendChild(drillEl);
+            }
+            if (!catLogs.length) { drillEl.innerHTML=`<div style="font-size:12px;color:var(--text-3);padding:8px;">No ${cat} logs.</div>`; return; }
+            drillEl.innerHTML = `
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                <span style="font-size:12px;font-weight:700;">${cat} — ${catLogs.length} entries, ${catLogs.reduce((s,l)=>s+parseFloat(l.hours_spent||0),0).toFixed(1)}h</span>
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('analysisCatDrill').innerHTML=''">✕</button>
+              </div>
+              <div class="table-wrapper">
+                <table><thead><tr><th>Date</th><th>Task</th><th>Sub-Cat</th><th>Hours</th><th>Done</th></tr></thead>
+                <tbody>
+                  ${catLogs.sort((a,b)=>b.log_date.localeCompare(a.log_date)).map(l=>`
+                    <tr>
+                      <td class="td-sm">${formatDate(l.log_date)}</td>
+                      <td>${truncate(l.task_project,35)}</td>
+                      <td style="font-size:11px;color:var(--text-3);">${l.sub_category||'—'}</td>
+                      <td><strong>${parseFloat(l.hours_spent).toFixed(1)}h</strong></td>
+                      <td>${l.is_completed?'<span class="completed-badge">✅</span>':'—'}</td>
+                    </tr>`).join('')}
+                </tbody></table>
+              </div>`;
+            drillEl.scrollIntoView({behavior:'smooth',block:'nearest'});
+          }
+        }
+      });
+    }
+  });
+}
+
+// ── Export Tab ──────────────────────────────────────────────
+let exportSubcats = {};
+
+
+
+function onExportCatChange() {
+  const cat = document.getElementById('exportCatSel').value;
+  const sel = document.getElementById('exportSubcatSel');
+  sel.innerHTML = '<option value="">All Sub-Categories</option>';
+  (exportSubcats[cat]||[]).forEach(n => sel.appendChild(new Option(n,n)));
+  updateExportCount();
+}
+
+function getExportFiltered() {
+  const uid    = document.getElementById('exportUserSel').value;
+  const cat    = document.getElementById('exportCatSel').value;
+  const subcat = document.getElementById('exportSubcatSel').value;
+  const month  = document.getElementById('exportMonthSel').value;
+  const from   = document.getElementById('exportDateFrom').value;
+  const to     = document.getElementById('exportDateTo').value;
+  return allLogs.filter(l => {
+    if (uid    && l.user_id      !== uid)    return false;
+    if (cat    && l.category     !== cat)    return false;
+    if (subcat && l.sub_category !== subcat) return false;
+    if (month  && l.month        !== month)  return false;
+    if (from   && l.log_date     < from)     return false;
+    if (to     && l.log_date     > to)       return false;
+    return true;
+  });
+}
+
+function updateExportCount() {
+  const f = getExportFiltered();
+  const el = document.getElementById('exportPreviewCount');
+  if (el) el.textContent = `${f.length} records match current filters`;
+}
+
+['exportUserSel','exportCatSel','exportSubcatSel','exportMonthSel','exportDateFrom','exportDateTo'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', updateExportCount);
+});
+
+function clearExportFilters() {
+  ['exportUserSel','exportCatSel','exportSubcatSel','exportMonthSel'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  ['exportDateFrom','exportDateTo'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('exportSubcatSel').innerHTML = '<option value="">All Sub-Categories</option>';
+  updateExportCount();
+}
+
+function exportFiltered() {
+  const data = getExportFiltered().map(mapLogForExport);
+  if (!data.length) { showToast('No records match your filters', 'warning'); return; }
+  const parts = [];
+  const uid = document.getElementById('exportUserSel').value;
+  if (uid) { const u = allUsers.find(x=>x.id===uid); if (u) parts.push(u.username); }
+  const cat = document.getElementById('exportCatSel').value; if (cat) parts.push(cat.toLowerCase());
+  const month = document.getElementById('exportMonthSel').value; if (month) parts.push(month.toLowerCase());
+  const fname = `worktracker_${parts.join('_')||'filtered'}_${new Date().toISOString().slice(0,10)}.csv`;
+  exportToCSV(data, fname);
+  showToast(`Exported ${data.length} records`, 'success');
+}
+
+// ── Task share donut click ──────────────────────────────────
+document.getElementById('deleteUserModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeDeleteUserModal(); });
+document.getElementById('resetPassModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeResetPassModal(); });
+document.getElementById('adminEditModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeAdminEdit(); });
+
+// ── Save project link mandatory setting ────────────────────────
+async function saveProjectLinkMandatory(checked) {
+  const { error } = await db.from('app_settings')
+    .update({ value: checked ? 'true' : 'false' })
+    .eq('key', 'project_link_mandatory');
+  if (error) showToast('Failed to save setting: ' + error.message, 'error');
+  else showToast(checked ? '✅ Project link is now mandatory' : 'Project link is now optional', 'success');
+}
+
+// ── Project Analytics ───────────────────────────────────────────
+async function loadProjectAnalytics() {
+  const summaryEl     = document.getElementById('projAnalyticsSummary');
+  const byProjEl      = document.getElementById('projByProjectTable');
+  const byEmployeeEl  = document.getElementById('projByEmployeeTable');
+  if (!summaryEl) return;
+
+  summaryEl.innerHTML    = '<div class="loading"><div class="spinner"></div> Loading…</div>';
+  byProjEl.innerHTML     = '<div class="loading"><div class="spinner"></div></div>';
+  byEmployeeEl.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  // Fetch all task_logs that have a linked_project_id
+  const { data: logs } = await db
+    .from('task_logs')
+    .select('user_id, team_member, hours_spent, linked_project_id, profiles(full_name)')
+    .not('linked_project_id', 'is', null);
+
+  // Fetch all projects for name lookup
+  const { data: projects } = await db
+    .from('projects')
+    .select('proj_unique_id, project_name, project_number')
+    .order('project_number');
+
+  const projMap = {};
+  (projects || []).forEach(p => { projMap[p.proj_unique_id] = p.project_name; });
+
+  const allLinked = logs || [];
+
+  // ── Summary cards ─────────────────────────────────────────
+  const totalHours    = allLinked.reduce((s, l) => s + parseFloat(l.hours_spent || 0), 0);
+  const linkedProjects = [...new Set(allLinked.map(l => l.linked_project_id))].length;
+  const linkedEmployees = [...new Set(allLinked.map(l => l.user_id))].length;
+  summaryEl.innerHTML = [
+    { label: 'Total Hours Logged', value: totalHours.toFixed(1) + 'h', icon: '⏱️' },
+    { label: 'Projects with Logs', value: linkedProjects, icon: '📁' },
+    { label: 'Employees Involved', value: linkedEmployees, icon: '👥' },
+    { label: 'Total Task Entries', value: allLinked.length, icon: '📋' },
+  ].map(c => `
+    <div style="background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:16px;">
+      <div style="font-size:22px;margin-bottom:6px;">${c.icon}</div>
+      <div style="font-size:22px;font-weight:800;color:var(--text-1);">${c.value}</div>
+      <div style="font-size:11px;color:var(--text-3);margin-top:2px;">${c.label}</div>
+    </div>`).join('');
+
+  // ── By Project table ──────────────────────────────────────
+  const byProj = {};
+  allLinked.forEach(l => {
+    const pid  = l.linked_project_id;
+    const name = projMap[pid] || pid;
+    if (!byProj[pid]) byProj[pid] = { name, hours: 0, employees: new Set(), logs: 0 };
+    byProj[pid].hours += parseFloat(l.hours_spent || 0);
+    byProj[pid].employees.add(l.user_id);
+    byProj[pid].logs++;
+  });
+
+  const projRows = Object.values(byProj).sort((a, b) => b.hours - a.hours);
+  byProjEl.innerHTML = projRows.length ? `
+    <table><thead><tr>
+      <th>Project</th><th>Total Hours</th><th>Employees</th><th>Log Entries</th>
+    </tr></thead><tbody>
+      ${projRows.map(p => `<tr>
+        <td><strong>${p.name}</strong></td>
+        <td><strong>${p.hours.toFixed(1)}h</strong></td>
+        <td>${p.employees.size}</td>
+        <td>${p.logs}</td>
+      </tr>`).join('')}
+    </tbody></table>`
+    : '<div style="padding:20px;color:var(--text-3);font-size:13px;">No linked task logs yet. Employees need to select a project when logging tasks.</div>';
+
+  // ── By Employee × Project table ───────────────────────────
+  const empProj = {};
+  allLinked.forEach(l => {
+    const emp  = l.profiles?.full_name || l.team_member || l.user_id;
+    const proj = projMap[l.linked_project_id] || l.linked_project_id;
+    const key  = emp + '||' + proj;
+    if (!empProj[key]) empProj[key] = { emp, proj, hours: 0, logs: 0 };
+    empProj[key].hours += parseFloat(l.hours_spent || 0);
+    empProj[key].logs++;
+  });
+
+  const empRows = Object.values(empProj).sort((a, b) => a.emp.localeCompare(b.emp) || b.hours - a.hours);
+  byEmployeeEl.innerHTML = empRows.length ? `
+    <table><thead><tr>
+      <th>Employee</th><th>Project</th><th>Hours Logged</th><th>Log Entries</th>
+    </tr></thead><tbody>
+      ${empRows.map(r => `<tr>
+        <td><strong>${r.emp}</strong></td>
+        <td>${r.proj}</td>
+        <td><strong>${r.hours.toFixed(1)}h</strong></td>
+        <td>${r.logs}</td>
+      </tr>`).join('')}
+    </tbody></table>`
+    : '<div style="padding:20px;color:var(--text-3);font-size:13px;">No data yet.</div>';
+}
+
+init();
+</script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+    }
+  </script>
+</body>
+</html>

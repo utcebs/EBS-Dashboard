@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, Suspense } from 'react'
 import { Routes, Route, Link, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { supabase, supabasePublic } from './supabaseClient'
+import { fetchPortfolio, mbrContent } from './aiClient'
 import LandingPage from './components/LandingPage'
 import AiBriefing from './components/AiBriefing'
 import AiChatbot from './components/AiChatbot'
@@ -678,6 +679,9 @@ async function loadImageDataURL(urls) {
       if (!res.ok) continue
       const blob = await res.blob()
       if (!blob || blob.size < 200) continue
+      // Vite's dev server returns index.html (200) for a missing asset — reject
+      // anything that isn't actually an image so we don't embed an HTML blob.
+      if (!/^image\//.test(blob.type)) continue
       return await new Promise((resolve, reject) => {
         const r = new FileReader()
         r.onloadend = () => resolve(r.result)
@@ -689,174 +693,233 @@ async function loadImageDataURL(urls) {
   return null
 }
 
-// ─── PPTX Report Generation ────────────────────────────────
+// Metallic-silver gradient as a data URL — pptxgenjs can't fill a slide
+// background with a gradient, so we paint one on a canvas and embed it.
+function makeSilverGradient(w = 1333, h = 750) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h
+  const ctx = c.getContext('2d')
+  const g = ctx.createRadialGradient(w * 0.4, h * 0.36, h * 0.08, w * 0.5, h * 0.5, w * 0.78)
+  g.addColorStop(0, '#efefef')
+  g.addColorStop(0.55, '#d9d9d9')
+  g.addColorStop(1, '#b4b4b4')
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+  return c.toDataURL('image/png')
+}
+
+// ─── PPTX Report Generation — one-slide "EBS Updates" MBR ─────────────────
+// A single executive slide: title + subtitle + logo, thick divider, then a
+// 3×2 panel grid. Portfolio Status (top-left) is drawn from real counts; the
+// other five panels are AI-written (mbrContent) with a data-derived fallback
+// so a deck is always produced even if the AI call fails.
 async function generateReport(projects) {
   const PptxGenJS = await loadPptx()
   const pptx = new PptxGenJS()
   pptx.defineLayout({ name: 'CUSTOM', width: 13.33, height: 7.5 })
   pptx.layout = 'CUSTOM'
 
-  const BG_DARK = '171310'        // espresso — matches the app's dark theme
-  const BG_LIGHT = 'F8F9FC'
-  const BRAND = 'CAA15A'          // champagne — matches the app's gold accent
-  const CHAMP = 'E6CF94'          // lighter champagne for eyebrows / accents
-  const INK = '2A2113'            // dark ink for text sitting on gold fills
-  const WHITE = 'FFFFFF'
-  const GRAY = '6B7A99'
-  const GREEN = '10B981'
-  const RED = 'EF4444'
-  const AMBER = 'F59E0B'
-  const BLUE = '3B82F6'
-  const SLATE = '94A3B8'
-
-  const now = new Date()
+  const FONT = 'Calibri'
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December']
+  const now = new Date()
   const currentMonth = monthNames[now.getMonth()]
   const currentYear = now.getFullYear()
-  const quarter = Math.ceil((now.getMonth() + 1) / 3)
-  const fy = now.getMonth() >= 3 ? currentYear : currentYear - 1
+  const nm = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  const nextMonth = monthNames[nm.getMonth()]
+  const nextYear = nm.getFullYear()
 
-  // Pull risks so the Risks slide reflects real data (projects are passed in).
-  let allRisks = []
-  try {
-    const { data: rs } = await supabasePublic.from('risks').select('*').order('project_id')
-    allRisks = rs || []
-  } catch { allRisks = [] }
-  const pNameById = Object.fromEntries(projects.map(p => [p.id, p.project_name]))
+  // ── Live portfolio (fresh public read; falls back to the passed-in list) ──
+  let data = { projects: projects || [], milestones: [], risks: [] }
+  try { const fresh = await fetchPortfolio(); if (fresh.projects && fresh.projects.length) data = fresh } catch { /* use passed-in */ }
+  const proj = data.projects
+  const allRisks = data.risks || []
+  const pNameById = Object.fromEntries(proj.map(p => [p.id, p.project_name]))
 
-  const FONT = 'Calibri'
-  const CARD = 'FFFFFF'
-  const CARD_BORDER = 'E6E2DA'
-  const PAGE_BG = 'F7F6F3'
-  const HEAD_DARK = '1F1A14'
-  const TXT = '333333'
-  const statusHex = { 'On Track': GREEN, 'At Risk': AMBER, 'Delayed': RED, 'Completed': BLUE, 'On Hold': SLATE }
-  const impactHex = { High: RED, Medium: AMBER, Low: GREEN }
-
-  // ─── Derived metrics (real data) ───
-  const total = projects.length
-  const cnt = (s) => projects.filter(p => p.status === s).length
-  const onTrack = cnt('On Track'), completed = cnt('Completed')
+  // ── Portfolio Status counts (deterministic, from data) ──
+  const total = proj.length
+  const cnt = (s) => proj.filter(p => p.status === s).length
   const numPct = (v) => v === 'Ongoing' ? 50 : parseInt(v) || 0
-  const pctOf = (n) => total ? Math.round((n / total) * 100) : 0
-  const deliveryHealth = pctOf(onTrack + completed)
-  const completionRate = total ? Math.round(projects.reduce((s, p) => s + numPct(p.percent_complete), 0) / total) : 0
-  const highRisks = allRisks.filter(r => (r.impact || '').toLowerCase() === 'high')
-  const decisions = projects.filter(p => p.actions_needed && p.actions_needed.trim().length > 8)
-  const highlights = projects.filter(p => p.status === 'Completed' || (numPct(p.percent_complete) >= 80 && p.status !== 'On Hold'))
-  const focus = projects.filter(p => ['Planning', 'Execution', 'UAT', 'Go-Live'].includes(p.phase) && p.status !== 'Completed')
-  const todayStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  const criticalRisks = highRisks.length || projects.filter(p => p.status === 'Delayed').length
+  const clip = (str, n) => { const t = String(str || '').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t }
 
-  // ─── Shared helpers ───
-  const safeChart = (slide, ...args) => { try { slide.addChart(...args) } catch (e) { console.error('MBR chart skipped:', e) } }
-  const card = (slide, x, y, w, h) => slide.addShape(pptx.shapes.ROUNDED_RECTANGLE, { x, y, w, h, rectRadius: 0.08, fill: { color: CARD }, line: { color: CARD_BORDER, width: 1 } })
-  const slideHeader = (slide, num, title) => {
-    slide.addShape(pptx.shapes.ROUNDED_RECTANGLE, { x: 0.4, y: 0.32, w: 0.36, h: 0.36, rectRadius: 0.06, fill: { color: HEAD_DARK } })
-    slide.addText(String(num), { x: 0.4, y: 0.32, w: 0.36, h: 0.36, fontSize: 15, bold: true, color: CHAMP, align: 'center', valign: 'middle', fontFace: FONT })
-    slide.addText(title, { x: 0.92, y: 0.3, w: 9, h: 0.42, fontSize: 18, bold: true, color: HEAD_DARK, valign: 'middle', fontFace: FONT, charSpacing: 1 })
-    slide.addText('EBS', { x: 11.6, y: 0.3, w: 1.35, h: 0.42, fontSize: 17, bold: true, color: BRAND, align: 'right', valign: 'middle', fontFace: FONT })
-    slide.addShape(pptx.shapes.RECTANGLE, { x: 0.4, y: 0.86, w: 12.53, h: 0.012, fill: { color: CARD_BORDER } })
+  // ── Panel content: AI-written, with a data-derived fallback ──
+  let ai = null
+  try { ai = await mbrContent(data, { month: currentMonth, year: currentYear, nextMonth, nextYear }) }
+  catch (e) { console.error('MBR AI content failed — using data fallback:', e) }
+  const fallback = () => {
+    const hi = proj.filter(p => p.status === 'Completed' || (numPct(p.percent_complete) >= 80 && p.status !== 'On Hold'))
+      .map(p => ({ lead: p.project_name, detail: p.status === 'Completed' ? 'Completed' : numPct(p.percent_complete) + '% complete' }))
+    const rk = allRisks.length
+      ? allRisks.map(r => ({ lead: pNameById[r.project_id] || 'Risk', detail: r.description || r.impact || '' }))
+      : proj.filter(p => ['Delayed', 'At Risk', 'On Hold'].includes(p.status)).map(p => ({ lead: p.project_name, detail: p.key_risks || p.status }))
+    const mmKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const nw = proj.filter(p => p.start_date === mmKey).map(p => ({ lead: p.project_name, detail: p.business_owner || p.dept_module || '' }))
+    const fo = proj.filter(p => ['Planning', 'Execution', 'UAT', 'Go-Live'].includes(p.phase) && p.status !== 'Completed')
+      .map(p => ({ lead: p.project_name, detail: `${p.phase} · ${numPct(p.percent_complete)}%` }))
+    const de = proj.filter(p => p.actions_needed && p.actions_needed.trim().length > 8)
+      .map(p => ({ lead: p.business_owner || p.project_name, detail: p.actions_needed }))
+    return { highlights: hi, risks: rk, newThisMonth: nw, focus: fo, decisions: de }
+  }
+  const fb = fallback()
+  const pick = (aiArr, fbArr) => (aiArr && aiArr.length ? aiArr : fbArr)
+  const content = {
+    highlights: pick(ai && ai.highlights, fb.highlights),
+    risks: pick(ai && ai.risks, fb.risks),
+    newThisMonth: pick(ai && ai.newThisMonth, fb.newThisMonth),
+    focus: pick(ai && ai.focus, fb.focus),
+    decisions: pick(ai && ai.decisions, fb.decisions),
   }
 
-  // ─── Slide 1: Title (dark, with network globe) ───
-  // Prefer the supplied globe artwork (drop it in public/ as mbr-globe.png);
-  // otherwise fall back to a canvas-drawn network globe so the deck still looks good.
-  const globeBg = await loadImageDataURL(['./mbr-globe.png', './mbr-globe.jpg', './mbr-globe.jpeg'])
-  const globeImg = globeBg ? null : (() => { try { return makeGlobeDataURL() } catch (e) { console.error('globe skipped:', e); return null } })()
-  const t = pptx.addSlide(); t.background = { color: '0B0907' }
-  if (globeBg) { try { t.addImage({ data: globeBg, x: 0, y: 0, w: 13.33, h: 7.5 }) } catch (e) { console.error('globe bg skipped:', e) } }
-  else if (globeImg) { try { t.addImage({ data: globeImg, x: 7.1, y: 0.55, w: 6.3, h: 6.3 }) } catch (e) { console.error('globe image skipped:', e) } }
-  // Eyebrow + gold underline
-  t.addText('ENTERPRISE BUSINESS SOLUTIONS', { x: 0.72, y: 1.45, w: 6, h: 0.3, fontSize: 13, color: CHAMP, charSpacing: 3, fontFace: FONT })
-  t.addShape(pptx.shapes.RECTANGLE, { x: 0.74, y: 1.92, w: 0.55, h: 0.03, fill: { color: BRAND } })
-  // Title
-  t.addText('MONTHLY\nBUSINESS REVIEW', { x: 0.68, y: 2.45, w: 7.4, h: 1.9, fontSize: 46, bold: true, color: WHITE, lineSpacingMultiple: 0.98, fontFace: FONT })
-  // Divider
-  t.addShape(pptx.shapes.RECTANGLE, { x: 0.74, y: 4.55, w: 1.7, h: 0.022, fill: { color: '5A4A2A' } })
-  // Month / scope
-  t.addText(`${currentMonth} ${currentYear}`, { x: 0.7, y: 4.78, w: 6, h: 0.5, fontSize: 22, bold: true, color: CHAMP, fontFace: FONT })
-  t.addText('EBS Projects', { x: 0.74, y: 5.32, w: 6, h: 0.35, fontSize: 13, color: '9A8E78', fontFace: FONT })
-  // Prepared-for / Date with gold ring markers
-  t.addShape(pptx.shapes.OVAL, { x: 0.74, y: 5.98, w: 0.36, h: 0.36, fill: { transparency: 100, color: '000000' }, line: { color: BRAND, width: 1 } })
-  t.addText('Prepared for:', { x: 1.26, y: 5.9, w: 5, h: 0.24, fontSize: 9, color: '9A8E78', fontFace: FONT })
-  t.addText('Executive Leadership Team', { x: 1.26, y: 6.12, w: 5, h: 0.3, fontSize: 12, color: WHITE, fontFace: FONT })
-  t.addShape(pptx.shapes.OVAL, { x: 0.74, y: 6.55, w: 0.36, h: 0.36, fill: { transparency: 100, color: '000000' }, line: { color: BRAND, width: 1 } })
-  t.addText('Date:', { x: 1.26, y: 6.47, w: 5, h: 0.24, fontSize: 9, color: '9A8E78', fontFace: FONT })
-  t.addText(todayStr, { x: 1.26, y: 6.69, w: 5, h: 0.3, fontSize: 12, color: WHITE, fontFace: FONT })
-
-  // ─── Slide 2: All details on one slide ───
-  const s = pptx.addSlide(); s.background = { color: PAGE_BG }
-  s.addText('Monthly Business Review', { x: 0.4, y: 0.28, w: 9, h: 0.45, fontSize: 20, bold: true, color: HEAD_DARK, fontFace: FONT })
-  s.addText(`EBS Projects   ·   ${currentMonth} ${currentYear}`, { x: 0.4, y: 0.72, w: 9, h: 0.3, fontSize: 10, color: GRAY, fontFace: FONT })
-  s.addText('EBS', { x: 11.6, y: 0.3, w: 1.35, h: 0.42, fontSize: 18, bold: true, color: BRAND, align: 'right', valign: 'middle', fontFace: FONT })
-  s.addShape(pptx.shapes.RECTANGLE, { x: 0.4, y: 1.06, w: 12.53, h: 0.012, fill: { color: CARD_BORDER } })
-
-  // KPI strip
-  const kpis = [
-    { label: 'Active Projects', value: String(total), color: CHAMP },
-    { label: 'Delivery Health', value: deliveryHealth + '%', color: '34D399' },
-    { label: 'Completion Rate', value: completionRate + '%', color: '7DB3F2' },
-    { label: 'Critical Risks', value: String(criticalRisks), color: 'F87171' },
-    { label: 'Decisions Needed', value: String(decisions.length), color: 'FBBF24' },
-  ]
-  kpis.forEach((k, i) => {
-    const x = 0.4 + i * 2.542
-    s.addShape(pptx.shapes.ROUNDED_RECTANGLE, { x, y: 1.2, w: 2.362, h: 1.0, rectRadius: 0.1, fill: { color: HEAD_DARK } })
-    s.addText(k.value, { x, y: 1.3, w: 2.362, h: 0.5, fontSize: 23, bold: true, color: k.color, align: 'center', fontFace: FONT })
-    s.addText(k.label, { x: x + 0.05, y: 1.83, w: 2.262, h: 0.3, fontSize: 8.5, color: 'C9C2B5', align: 'center', fontFace: FONT })
-  })
-
-  // Detail cards — 3 columns x 2 rows
-  const colW = 4.043, gap = 0.2
-  const gx = [0.4, 0.4 + colW + gap, 0.4 + 2 * (colW + gap)]
-  const r1 = 2.35, r2 = 4.83, cardH = 2.3
-  // Keep each bullet to one line (clip long text) and cap at 5 rows so cards never overflow.
-  const clip = (str, n = 54) => { const t = String(str); return t.length > n ? t.slice(0, n - 1) + '…' : t }
-  const listCard = (x, y, title, lines, empty) => {
-    card(s, x, y, colW, cardH)
-    s.addText(title, { x: x + 0.18, y: y + 0.13, w: colW - 0.36, h: 0.3, fontSize: 11, bold: true, color: HEAD_DARK, charSpacing: 0.5, fontFace: FONT })
-    const body = (lines && lines.length)
-      ? lines.slice(0, 5).map(t => ({ text: clip(t), options: { bullet: { code: '2022' }, color: TXT } }))
-      : [{ text: empty, options: { color: '999999' } }]
-    s.addText(body, { x: x + 0.24, y: y + 0.54, w: colW - 0.42, h: cardH - 0.66, fontSize: 8.5, color: TXT, valign: 'top', lineSpacingMultiple: 1.4, fontFace: FONT })
+  // ── Intro slides (Union-branded) ──
+  // Load the Union wordmark once; shared by both intro slides. Frame + logo
+  // helpers keep the two slides identical in chrome.
+  const unionLogo = await loadImageDataURL(['./union-logo.png', './union-logo.jpg'])
+  const uH = 0.82, uW = uH * (1571 / 662)   // wordmark aspect ≈ 2.37:1
+  const drawFrame = (sl) => sl.addShape(pptx.shapes.RECTANGLE, { x: 0.12, y: 0.12, w: 13.09, h: 7.26, fill: { type: 'none' }, line: { color: '000000', width: 3 } })
+  const drawUnion = (sl) => {
+    if (unionLogo) { try { sl.addImage({ data: unionLogo, x: 0.62, y: 0.5, w: uW, h: uH }) } catch { /* ignore */ } }
+    else sl.addText('UNION', { x: 0.62, y: 0.5, w: 3, h: 0.7, fontSize: 26, bold: true, color: '000000', fontFace: FONT })
   }
 
-  // Status Overview (colored dots)
-  card(s, gx[0], r1, colW, cardH)
-  s.addText('STATUS OVERVIEW', { x: gx[0] + 0.18, y: r1 + 0.13, w: colW - 0.36, h: 0.3, fontSize: 11, bold: true, color: HEAD_DARK, charSpacing: 0.5, fontFace: FONT })
-  ;[['On Track', onTrack, GREEN], ['At Risk', cnt('At Risk'), AMBER], ['Delayed', cnt('Delayed'), RED], ['Completed', completed, BLUE], ['On Hold', cnt('On Hold'), SLATE]].forEach((it, i) => {
-    const yy = r1 + 0.56 + i * 0.32
-    s.addShape(pptx.shapes.RECTANGLE, { x: gx[0] + 0.24, y: yy + 0.02, w: 0.15, h: 0.15, fill: { color: it[2] } })
-    s.addText(it[0], { x: gx[0] + 0.5, y: yy - 0.04, w: 2.0, h: 0.28, fontSize: 9.5, color: TXT, fontFace: FONT })
-    s.addText(`${it[1]} (${pctOf(it[1])}%)`, { x: gx[0] + colW - 1.4, y: yy - 0.04, w: 1.2, h: 0.28, fontSize: 9.5, bold: true, color: TXT, align: 'right', fontFace: FONT })
+  // Fiscal-quarter title line (FY starts in April, e.g. Apr 2026 → Q1 FY26).
+  const fiscalIdx = (now.getMonth() - 3 + 12) % 12
+  const q = Math.floor(fiscalIdx / 3) + 1
+  const fyStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+  const quarterLine = `${['First', 'Second', 'Third', 'Fourth'][q - 1]} Quarter FY${String(fyStart).slice(2)}`
+  const ord = (d) => { const t = d % 100; return d + (['th', 'st', 'nd', 'rd'][(t - 20) % 10] || ['th', 'st', 'nd', 'rd'][t] || 'th') }
+  const dateLine = `${now.toLocaleDateString('en-US', { month: 'long' })} ${ord(now.getDate())}, ${now.getFullYear()}`
+
+  // Intro slide 1 — title (white, black frame, black rounded panel)
+  const s1 = pptx.addSlide(); s1.background = { color: 'FFFFFF' }
+  drawFrame(s1); drawUnion(s1)
+  s1.addShape(pptx.shapes.ROUNDED_RECTANGLE, { x: 0.5, y: 3.15, w: 12.33, h: 3.85, rectRadius: 0.16, fill: { color: '000000' } })
+  s1.addText(`${quarterLine}\nMonthly Business Performance Review`, { x: 1.0, y: 3.7, w: 11.0, h: 1.5, fontSize: 30, bold: true, color: 'FFFFFF', lineSpacingMultiple: 1.15, valign: 'top', fontFace: FONT })
+  s1.addText(dateLine, { x: 1.0, y: 6.32, w: 6, h: 0.4, fontSize: 15, color: 'FFFFFF', fontFace: FONT })
+
+  // Intro slide 2 — section divider (silver gradient, centered "EBS Updates")
+  const s2 = pptx.addSlide()
+  const silver = (() => { try { return makeSilverGradient() } catch { return null } })()
+  if (silver) { try { s2.addImage({ data: silver, x: 0, y: 0, w: 13.33, h: 7.5 }) } catch { s2.background = { color: 'D9D9D9' } } }
+  else s2.background = { color: 'D9D9D9' }
+  drawFrame(s2); drawUnion(s2)
+  s2.addText('EBS Updates', { x: 0, y: 3.25, w: 13.33, h: 1.0, fontSize: 34, bold: true, color: '111111', align: 'center', valign: 'middle', fontFace: FONT })
+
+  // ── Slide 3: the one-slide MBR ──
+  const s = pptx.addSlide(); s.background = { color: 'FFFFFF' }
+  // Title + subtitle + logo (public/mbr-logo.png = the UJ mark; falls back to a wordmark)
+  s.addText('EBS Updates', { x: 0.5, y: 0.22, w: 9, h: 0.6, fontSize: 30, bold: true, color: '141414', fontFace: FONT })
+  s.addText(`EBS Project Portfolio   |   ${currentMonth} ${currentYear}   |   Monthly Business Review`,
+    { x: 0.52, y: 0.86, w: 10.6, h: 0.34, fontSize: 13, color: '555555', fontFace: FONT })
+  const logo = await loadImageDataURL(['./mbr-logo.png', './mbr-logo.jpg'])
+  if (logo) { try { s.addImage({ data: logo, x: 12.11, y: 0.2, w: 0.72, h: 0.82 }) } catch { /* ignore */ } }
+  else s.addText('EBS', { x: 11.6, y: 0.3, w: 1.4, h: 0.6, fontSize: 26, bold: true, color: 'CAA15A', align: 'right', valign: 'middle', fontFace: FONT })
+  // Thick divider under the header
+  s.addShape(pptx.shapes.RECTANGLE, { x: 0.5, y: 1.42, w: 12.33, h: 0.03, fill: { color: '141414' } })
+
+  // Grid geometry — 3 columns × 2 rows
+  const colW = 3.9, gap = 0.315
+  const cx = [0.5, 0.5 + colW + gap, 0.5 + 2 * (colW + gap)]
+  const topTitleY = 1.6, topBoxY = 1.94, boxH = 2.42
+  const botTitleY = 4.5, botBoxY = 4.84
+  // Faint grid dividers (2 vertical + 1 horizontal), like the reference
+  ;[cx[1] - gap / 2, cx[2] - gap / 2].forEach(vx =>
+    s.addShape(pptx.shapes.RECTANGLE, { x: vx, y: 1.55, w: 0.01, h: 5.65, fill: { color: 'C9C9C9' } }))
+  s.addShape(pptx.shapes.RECTANGLE, { x: 0.5, y: 4.42, w: 12.33, h: 0.01, fill: { color: 'C9C9C9' } })
+
+  // PowerPoint's autofit ("shrink text on overflow") isn't applied until the box
+  // is edited, so a freshly-opened deck overflows. Instead we measure the content
+  // and pick a font size that deterministically fits — correct on first open,
+  // in every viewer, with no autofit. Conservative char-width + space estimates.
+  const SPACE_AFTER = 3           // points of space after each bullet paragraph
+  const fitFont = (rows, usableH, textW) => {
+    for (let F = 9; F >= 6; F -= 0.25) {
+      const charsPerLine = Math.max(18, (textW * 72) / (0.58 * F))  // ~avg Calibri glyph width
+      let h = 0
+      rows.forEach((it) => {
+        const len = clip(it.lead, 40).length + 3 + clip(it.detail, 88).length
+        const lines = Math.max(1, Math.ceil(len / charsPerLine))
+        h += lines * (F * 1.2 / 72) + SPACE_AFTER / 72
+      })
+      if (h <= usableH) return F
+    }
+    return 6
+  }
+
+  // Grey panel: bold title + rounded box + bulleted rich text (bold lead — detail)
+  const panel = (x, titleY, boxY2, title, items, opts) => {
+    const { bulletCode = '2022', max = 7 } = (opts || {})
+    s.addText(title, { x: x + 0.04, y: titleY, w: colW - 0.08, h: 0.32, fontSize: 13.5, bold: true, color: '1A1A1A', valign: 'middle', fontFace: FONT })
+    s.addShape(pptx.shapes.ROUNDED_RECTANGLE, { x, y: boxY2, w: colW, h: boxH, rectRadius: 0.09, fill: { color: 'E6E6E6' }, line: { type: 'none' } })
+    const rows = (items && items.length ? items : [{ lead: '', detail: 'Nothing to report this month' }]).slice(0, max)
+    const textW = colW - 0.44
+    const F = fitFont(rows, boxH - 0.34, textW)
+    const runs = []
+    rows.forEach(it => {
+      const lead = clip(it.lead, 40), detail = clip(it.detail, 88)
+      if (lead && detail) {
+        runs.push({ text: lead, options: { bold: true, bullet: { code: bulletCode, indent: 13 }, color: '1E2230', paraSpaceAfter: SPACE_AFTER } })
+        runs.push({ text: ' — ' + detail, options: { color: '3C3C3C', breakLine: true } })
+      } else {
+        runs.push({ text: lead || detail, options: { bold: !!lead, bullet: { code: bulletCode, indent: 13 }, color: '1E2230', paraSpaceAfter: SPACE_AFTER, breakLine: true } })
+      }
+    })
+    s.addText(runs, { x: x + 0.24, y: boxY2 + 0.15, w: textW, h: boxH - 0.28, fontSize: F, color: '3C3C3C', valign: 'top', lineSpacingMultiple: 1.0, fontFace: FONT })
+  }
+
+  // Top-left: Portfolio Status — colored count bars + total + roadmap link
+  s.addText('Portfolio Status', { x: cx[0], y: topTitleY, w: colW, h: 0.32, fontSize: 13.5, bold: true, color: '1A1A1A', align: 'center', valign: 'middle', fontFace: FONT })
+  const statusRows = [
+    ['On Track', cnt('On Track'), '10B981', 'D1FAE5'],
+    ['At Risk', cnt('At Risk'), 'F59E0B', 'FEF3C7'],
+    ['Delayed', cnt('Delayed'), 'EF4444', 'FEE2E2'],
+    ['On Hold', cnt('On Hold'), '8B5CF6', 'EDE9FE'],
+    ['Completed', cnt('Completed'), '2563EB', 'DBEAFE'],
+  ].filter(r => r[1] > 0)
+  const barsTop = 1.98, barsBottom = 3.4
+  const pitch = (barsBottom - barsTop) / Math.max(statusRows.length, 1)
+  const barH = Math.min(0.44, pitch - 0.08)
+  const numW = 0.84
+  statusRows.forEach((r, i) => {
+    const yy = barsTop + i * pitch
+    s.addShape(pptx.shapes.RECTANGLE, { x: cx[0], y: yy, w: colW - numW - 0.12, h: barH, fill: { color: r[2] } })
+    s.addText(r[0], { x: cx[0] + 0.16, y: yy, w: colW - numW - 0.5, h: barH, fontSize: 10.5, bold: true, color: 'FFFFFF', valign: 'middle', fontFace: FONT })
+    s.addShape(pptx.shapes.RECTANGLE, { x: cx[0] + colW - numW, y: yy, w: numW, h: barH, fill: { color: r[3] } })
+    s.addText(String(r[1]), { x: cx[0] + colW - numW, y: yy, w: numW, h: barH, fontSize: 12.5, bold: true, color: '1A1A1A', align: 'center', valign: 'middle', fontFace: FONT })
   })
+  const totY = 3.5
+  s.addShape(pptx.shapes.RECTANGLE, { x: cx[0], y: totY, w: colW, h: 0.56, fill: { color: '13233B' } })
+  s.addText(`${total} Projects`, { x: cx[0], y: totY + 0.03, w: colW, h: 0.32, fontSize: 19, bold: true, color: 'FFFFFF', align: 'center', valign: 'middle', fontFace: FONT })
+  s.addText(`Total Active Portfolio   |   ${currentMonth} ${currentYear}`, { x: cx[0], y: totY + 0.36, w: colW, h: 0.18, fontSize: 8, color: 'B9C6D8', align: 'center', valign: 'middle', fontFace: FONT })
+  const lnkY = totY + 0.66
+  s.addShape(pptx.shapes.RECTANGLE, { x: cx[0], y: lnkY, w: colW, h: 0.28, fill: { color: 'EEF0FA' } })
+  s.addText([{ text: '▸ Full Projects Roadmap & Tracker', options: { hyperlink: { url: 'https://utcebs.github.io/EBS-Dashboard/' } } }],
+    { x: cx[0], y: lnkY, w: colW, h: 0.28, fontSize: 9.5, bold: true, color: '2B4C7E', align: 'center', valign: 'middle', fontFace: FONT })
 
-  // Highlights
-  const hiLines = highlights.slice(0, 6).map(p => `${p.project_name} — ${(p.status === 'Completed' || numPct(p.percent_complete) >= 100) ? 'Completed' : numPct(p.percent_complete) + '%'}`)
-  listCard(gx[1], r1, `${currentMonth.toUpperCase()} HIGHLIGHTS`, hiLines, 'No highlights this month')
+  // The other five panels (AI-written content)
+  panel(cx[1], topTitleY, topBoxY, `${currentMonth} Highlights`, content.highlights, { bulletCode: '2713', max: 7 })
+  panel(cx[2], topTitleY, topBoxY, 'Risks & Issues', content.risks, { max: 7 })
+  panel(cx[0], botTitleY, botBoxY, 'New This Month', content.newThisMonth, { max: 7 })
+  panel(cx[1], botTitleY, botBoxY, `${nextMonth} ${nextYear} Focus`, content.focus, { max: 8 })
+  panel(cx[2], botTitleY, botBoxY, 'Decisions Required', content.decisions, { max: 7 })
 
-  // Risks & Issues
-  const riskLines = allRisks.length
-    ? allRisks.slice(0, 6).map(r => `${pNameById[r.project_id] || '—'}${r.description ? ' — ' + String(r.description).slice(0, 55) : ''}`)
-    : projects.filter(p => ['Delayed', 'At Risk', 'On Hold'].includes(p.status)).slice(0, 6).map(p => `${p.project_name}${p.key_risks ? ' — ' + String(p.key_risks).slice(0, 55) : ' — ' + p.status}`)
-  listCard(gx[2], r1, 'RISKS & ISSUES', riskLines, 'No active risks')
+  await pptx.writeFile({ fileName: `EBS_MBR_${currentMonth}_${currentYear}.pptx` })
+}
 
-  // In Focus
-  const focusLines = focus.slice(0, 6).map(p => `${p.project_name} — ${numPct(p.percent_complete)}%`)
-  listCard(gx[0], r2, 'IN FOCUS', focusLines, 'Nothing in focus')
-
-  // Decisions Required
-  const decLines = decisions.slice(0, 6).map(p => `${p.project_name} — ${String(p.actions_needed).trim().slice(0, 55)}`)
-  listCard(gx[1], r2, 'DECISIONS REQUIRED', decLines, 'No pending decisions')
-
-  // New This Month
-  const mmKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  const newThisMonth = projects.filter(p => p.start_date === mmKey)
-  const newLines = newThisMonth.slice(0, 6).map(p => `${p.project_name}${p.business_owner ? ' · ' + p.business_owner : ''}`)
-  listCard(gx[2], r2, 'NEW THIS MONTH', newLines, 'No new projects this month')
-
-  pptx.writeFile({ fileName: `EBS_MBR_${currentMonth}_${currentYear}.pptx` })
+// "Generate MBR" button — owns its own busy state since generateReport waits on
+// the AI to write the slide's panels (a few seconds).
+function MbrButton({ projects }) {
+  const [busy, setBusy] = useState(false)
+  const run = async () => {
+    if (busy) return
+    setBusy(true)
+    try { await generateReport(projects) }
+    catch (e) { console.error('MBR generation failed:', e); alert('Could not generate the MBR deck. Please try again.') }
+    finally { setBusy(false) }
+  }
+  return (
+    <button onClick={run} disabled={busy}
+      className="flex items-center gap-2 px-4 py-2 bg-surface-900 text-white rounded-xl text-sm font-medium hover:bg-surface-800 transition-colors shadow-sm whitespace-nowrap disabled:opacity-70 disabled:cursor-wait">
+      {busy ? <RefreshCw size={16} className="animate-spin" /> : <Presentation size={16} />}
+      {busy ? 'Generating…' : 'Generate MBR'}
+    </button>
+  )
 }
 
 // ─── Drill-Down List Modal ──────────────────────────────────
@@ -1271,10 +1334,7 @@ function Dashboard() {
       {/* Project-level dashboard selector */}
       <div className="flex flex-wrap items-center gap-2">
         <AiBriefing />
-        <button onClick={() => generateReport(projects)}
-          className="flex items-center gap-2 px-4 py-2 bg-surface-900 text-white rounded-xl text-sm font-medium hover:bg-surface-800 transition-colors shadow-sm whitespace-nowrap">
-          <Presentation size={16} /> Generate MBR
-        </button>
+        <MbrButton projects={projects} />
         <select value={selectedProjectId} onChange={e => { if (e.target.value) navigate(`/projects/${e.target.value}`) }}
           className={`${selectCls} w-full sm:w-auto sm:min-w-[220px] text-sm`}>
           <option value="">Jump to project...</option>

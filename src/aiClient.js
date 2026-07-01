@@ -104,6 +104,53 @@ export async function saveBriefing(content, provider) {
   return data || null
 }
 
+// ── MBR (Monthly Business Review) — one-slide panel content ──────────────────
+// Returns { highlights, risks, newThisMonth, focus, decisions }, each an array
+// of { lead, detail }. The slide renderer draws `lead` bold + `detail` after it.
+export async function mbrContent(data, ctx) {
+  const system =
+    'You are an executive project-portfolio analyst writing a ONE-SLIDE Monthly Business Review (MBR) for the EBS ' +
+    '(Enterprise Business Solutions) department. Use ONLY the provided data; never invent projects, owners, dates or numbers. ' +
+    'Reference projects by their exact `name`. Risk information lives in each project\'s `keyRisks` field ' +
+    '(the separate `risks` list may be empty). Every item is a single crisp executive bullet made of a bold LEAD ' +
+    '(a project, workstream or owning function) and a terse DETAIL. Return STRICT JSON only — no prose, no markdown fences.'
+  const prompt =
+    `Reporting month: ${ctx.month} ${ctx.year}. Following month: ${ctx.nextMonth} ${ctx.nextYear}.\n` +
+    `Current portfolio (JSON):\n${snapshot(data)}\n\n` +
+    'Return a JSON object with EXACTLY these keys, each an array of objects shaped {"lead": string, "detail": string}:\n' +
+    '- "highlights": 5-8 wins / progress made this month (completed or near-complete work). lead = project/workstream, detail = what was achieved.\n' +
+    '- "risks": 4-7 delayed / at-risk / on-hold items or serious key risks. lead = project, detail = the risk and its impact (include a date if given).\n' +
+    '- "newThisMonth": 3-7 projects newly started or added this month. If start dates are unclear, use the most recently started projects. lead = project, detail = module or business owner.\n' +
+    `- "focus": 5-9 priorities for ${ctx.nextMonth} ${ctx.nextYear} (upcoming go-lives, UAT sign-offs, milestones due). lead = project, detail = the target/action and date.\n` +
+    '- "decisions": 4-7 decisions leadership must make now (drawn from actionsNeeded, blockers, dependencies). lead = the owning function or person (e.g. Finance, Operations, Executive, Commercial), detail = the decision needed and due date if known.\n' +
+    'Rules: keep every `lead` <= 5 words and every `detail` <= 16 words. Never leave an array empty — if a section truly has nothing, return a single item saying so. Output JSON only.'
+  const r = await callAI(system, prompt, 'heavy')
+  return parseMbrJson(r.text)
+}
+
+function parseMbrJson(text) {
+  let t = String(text || '').trim()
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  if (fence) t = fence[1].trim()
+  const a = t.indexOf('{'), b = t.lastIndexOf('}')
+  if (a >= 0 && b > a) t = t.slice(a, b + 1)
+  let obj
+  try { obj = JSON.parse(t) } catch { return null }
+  const norm = (arr) => Array.isArray(arr) ? arr.map((it) => {
+    if (it && typeof it === 'object') return { lead: String(it.lead || '').trim(), detail: String(it.detail || it.text || '').trim() }
+    const s = String(it || '')
+    const parts = s.split(/\s+[–—-]\s+/)
+    return { lead: (parts[0] || '').replace(/\*\*/g, '').trim(), detail: parts.slice(1).join(' — ').replace(/\*\*/g, '').trim() }
+  }).filter((x) => x.lead || x.detail) : []
+  return {
+    highlights: norm(obj.highlights),
+    risks: norm(obj.risks),
+    newThisMonth: norm(obj.newThisMonth || obj.new_this_month),
+    focus: norm(obj.focus),
+    decisions: norm(obj.decisions),
+  }
+}
+
 // ── Chatbot ─────────────────────────────────────────────────────────────────
 export async function chatAnswer(data, question, history = []) {
   const system =

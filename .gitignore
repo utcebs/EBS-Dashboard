@@ -4,3 +4,7 @@ dist
 *.local
 .DS_Store
 .tmp/
+
+# Generated MBR decks and Supabase temp (never commit)
+public/*.pptx
+supabase/.temp/

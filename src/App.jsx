@@ -772,7 +772,6 @@ async function generateReport(projects) {
   // helpers keep the two slides identical in chrome.
   const unionLogo = await loadImageDataURL(['./union-logo.png', './union-logo.jpg'])
   const uH = 0.82, uW = uH * (1571 / 662)   // wordmark aspect ≈ 2.37:1
-  const drawFrame = (sl) => sl.addShape(pptx.shapes.RECTANGLE, { x: 0.12, y: 0.12, w: 13.09, h: 7.26, fill: { type: 'none' }, line: { color: '000000', width: 3 } })
   const drawUnion = (sl) => {
     if (unionLogo) { try { sl.addImage({ data: unionLogo, x: 0.62, y: 0.5, w: uW, h: uH }) } catch { /* ignore */ } }
     else sl.addText('UNION', { x: 0.62, y: 0.5, w: 3, h: 0.7, fontSize: 26, bold: true, color: '000000', fontFace: FONT })
@@ -788,7 +787,7 @@ async function generateReport(projects) {
 
   // Intro slide 1 — title (white, black frame, black rounded panel)
   const s1 = pptx.addSlide(); s1.background = { color: 'FFFFFF' }
-  drawFrame(s1); drawUnion(s1)
+  drawUnion(s1)
   s1.addShape(pptx.shapes.ROUNDED_RECTANGLE, { x: 0.5, y: 3.15, w: 12.33, h: 3.85, rectRadius: 0.16, fill: { color: '000000' } })
   s1.addText(`${quarterLine}\nMonthly Business Performance Review`, { x: 1.0, y: 3.7, w: 11.0, h: 1.5, fontSize: 30, bold: true, color: 'FFFFFF', lineSpacingMultiple: 1.15, valign: 'top', fontFace: FONT })
   s1.addText(dateLine, { x: 1.0, y: 6.32, w: 6, h: 0.4, fontSize: 15, color: 'FFFFFF', fontFace: FONT })
@@ -798,7 +797,7 @@ async function generateReport(projects) {
   const silver = (() => { try { return makeSilverGradient() } catch { return null } })()
   if (silver) { try { s2.addImage({ data: silver, x: 0, y: 0, w: 13.33, h: 7.5 }) } catch { s2.background = { color: 'D9D9D9' } } }
   else s2.background = { color: 'D9D9D9' }
-  drawFrame(s2); drawUnion(s2)
+  drawUnion(s2)
   s2.addText('EBS Updates', { x: 0, y: 3.25, w: 13.33, h: 1.0, fontSize: 34, bold: true, color: '111111', align: 'center', valign: 'middle', fontFace: FONT })
 
   // ── Slide 3: the one-slide MBR ──

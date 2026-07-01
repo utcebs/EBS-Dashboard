@@ -3050,9 +3050,11 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
    Re-points the existing --kpi-color var; higher specificity wins. */
 .app-dark [data-kpi].dash-kpi {
   --kpi-color: 212,184,123;
+  /* Same plum panel as the rest of the cards + a soft gold glow, so the KPI
+     row matches the dashboard instead of reading as a lighter grey-gold. */
   background:
-    radial-gradient(ellipse 70% 90% at 100% 0%, rgba(212,184,123,0.15), transparent 62%),
-    linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)) !important;
+    radial-gradient(ellipse 75% 95% at 100% 0%, rgba(212,184,123,0.12), transparent 60%),
+    linear-gradient(180deg, rgba(43,34,58,0.74), rgba(26,20,36,0.80)) !important;
   border-color: rgba(212,184,123,0.22) !important;
 }
 

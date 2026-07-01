@@ -1535,7 +1535,11 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
      which leaves rectangular repaint artifacts in Chromium on mouse-move). */
   backdrop-filter: blur(4px) saturate(185%);
   -webkit-backdrop-filter: blur(4px) saturate(185%);
-  transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+  /* Pin the card to its own GPU layer so hovering a child (tab/chart) doesn't
+     make Chromium re-rasterize the backdrop-filter and flash the white edges. */
+  transform: translateZ(0);
+  will-change: transform;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 /* Subtle hover lift on clickable rows / cards */

@@ -11,7 +11,7 @@ import {
   RefreshCw, Search, Menu, AlertCircle, ExternalLink, BarChart3,
   ListChecks, FileWarning, Info, ChevronDown, ChevronUp,
   Upload, Download, FileSpreadsheet, Presentation, Sparkles,
-  FileText, UserCog, User, Sun, Moon
+  FileText, UserCog, User, Sun, Moon, Star
 } from 'lucide-react'
 
 // Heavy deps lazy-loaded on first use. Pays the download cost once
@@ -1141,6 +1141,11 @@ function Dashboard() {
   const [drillDown, setDrillDown] = useState(null) // { title, projects }
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const navigate = useNavigate()
+  // Milestones — for the "Top Projects" card (ranked by milestones completed).
+  const [milestones, setMilestones] = useState([])
+  useEffect(() => {
+    supabasePublic.from('milestones').select('project_id, development_status').then(({ data }) => setMilestones(data || []))
+  }, [])
 
   if (projectsLoading) return <Spinner />
   if (projectsError) return <EmptyState icon={AlertCircle} title="Failed to load projects" description={projectsError} action={<button onClick={refreshProjects} className="text-brand-600 text-sm font-medium">Try again</button>} />
@@ -1161,6 +1166,15 @@ function Dashboard() {
   const pct = (n) => total ? Math.round((n / total) * 100) : 0
   const atRiskList = projects.filter(p => p.status === 'At Risk' || p.status === 'Delayed')
   const recentlyUpdated = [...projects].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at)).slice(0, 5)
+
+  // Top projects by milestone achievement (most milestones completed).
+  const msStats = {}
+  milestones.forEach(m => { const s = msStats[m.project_id] || (msStats[m.project_id] = { done: 0, total: 0 }); s.total++; if (m.development_status === 'Completed') s.done++ })
+  const topProjects = projects
+    .map(p => ({ ...p, msDone: msStats[p.id]?.done || 0, msTotal: msStats[p.id]?.total || 0 }))
+    .filter(p => p.msTotal > 0)
+    .sort((a, b) => b.msDone - a.msDone || (b.msDone / b.msTotal) - (a.msDone / a.msTotal))
+    .slice(0, 5)
 
   // Drill-down handlers
   const drillStatus = (status) => {
@@ -1307,9 +1321,26 @@ function Dashboard() {
 
     {/* Hero charts — Project Activity (line) + Status/Priority tabbed donut.
         recharts ships in its own chunk; Suspense covers the gap until it arrives. */}
-    <Suspense fallback={<div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5"><div className="bg-white rounded-2xl border border-surface-200 h-[316px] lg:col-span-2 animate-pulse" /><div className="bg-white rounded-2xl border border-surface-200 h-[316px] animate-pulse" /></div>}>
+    <Suspense fallback={<div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5"><div className="bg-white rounded-2xl border border-surface-200 h-[316px] animate-pulse" /><div className="bg-white rounded-2xl border border-surface-200 h-[316px] animate-pulse" /><div className="bg-white rounded-2xl border border-surface-200 h-[316px] animate-pulse" /></div>}>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
-        <DashboardCharts section="trend" trendData={trendData} className="lg:col-span-2" />
+        <DashboardCharts section="trend" trendData={trendData} />
+        {/* Top Projects — ranked by milestones completed */}
+        <div className="bg-white rounded-2xl p-5 border border-surface-200 shadow-sm flex flex-col">
+          <h3 className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2"><Star size={15} className="text-brand-400" /> Top Projects <span className="text-xs font-normal text-surface-400">· by milestones</span></h3>
+          {topProjects.length === 0 ? (
+            <p className="text-sm text-surface-400 py-4">No milestone data yet</p>
+          ) : (
+            <div className="space-y-2 dash-list-scroll">
+              {topProjects.map(p => (
+                <div key={p.id} onClick={() => navigate(`/projects/${p.id}`)} title={`${p.project_name} — ${p.msDone}/${p.msTotal} milestones completed`}
+                  className="dash-row flex items-center justify-between p-2.5 rounded-xl bg-surface-50 hover:bg-brand-50/50 cursor-pointer transition-all group">
+                  <div className="min-w-0"><p className="text-sm font-medium text-surface-800 truncate">{p.project_name}</p><p className="text-xs text-surface-500 truncate">{p.business_owner || '—'}</p></div>
+                  <div className="flex items-center gap-2 shrink-0"><span className="text-sm font-semibold text-brand-600 whitespace-nowrap">{p.msDone}/{p.msTotal}</span><ChevronRight size={14} className="text-surface-300 group-hover:text-brand-400" /></div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <DashboardCharts section="statusPriority"
           byStatus={byStatus} byPriority={byPriority}
           PIE_COLORS={PIE_COLORS} PRI_PIE_COLORS={PRI_PIE_COLORS} onPieClick={onPieClick} />

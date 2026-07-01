@@ -78,7 +78,8 @@ export async function dailyBriefing(data, today) {
     'Risk information lives in each project\'s `keyRisks` field (the separate `risks` list may be empty).'
   const prompt =
     `Today is ${today}. Here is the current portfolio as JSON:\n${snapshot(data)}\n\n` +
-    `Begin with exactly one title line: "# EBS Daily Portfolio Briefing – ${today}". Then the sections below. ` +
+    'Do NOT add a title or date line — start directly with the Headline section. ' +
+    'Use **bold** for the section labels (e.g. **Headline**), NOT markdown "#" headings. ' +
     'Write a short daily briefing in markdown with these sections (omit a section if there is nothing to say):\n' +
     '**Headline** — one line on overall portfolio health.\n' +
     '**Needs attention** — delayed / at-risk projects, each with a one-line why.\n' +
@@ -86,7 +87,9 @@ export async function dailyBriefing(data, today) {
     '**Top risks** — the 2-3 most serious, with the mitigation if given.\n' +
     '**Do next** — 2-3 concrete recommended actions.\n' +
     'Keep it tight — short bullets, no preamble.'
-  return callAI(system, prompt, 'heavy')
+  const r = await callAI(system, prompt, 'heavy')
+  // Prepend the title + date deterministically (the model is inconsistent about it).
+  return { ...r, text: `# EBS Daily Portfolio Briefing – ${today}\n\n${r.text}` }
 }
 
 // ── Cached briefing (shared across all users, regenerated on demand) ─────────

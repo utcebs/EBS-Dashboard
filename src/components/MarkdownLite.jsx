@@ -28,21 +28,24 @@ export default function MarkdownLite({ text }) {
     const t = raw.trim()
     if (!t) { out.push(<div key={idx} style={{ height: 10 }} />); return }
 
-    // # / ## / ### headings → document title (split off a trailing date)
+    // # / ## / ### headings. A heading ending in a date = the doc title (big +
+    // date chip). Any OTHER heading is treated as a section label (gold eyebrow),
+    // so the model writing `## Headline` looks the same as `**Headline**`.
     const h = t.match(/^(#{1,3})\s+(.*)$/)
     if (h) {
-      const lvl = h[1].length
-      let title = h[2], date = null
-      const dm = title.match(/^(.*?)\s*[–—-]\s*(\d{4}-\d{2}-\d{2})\s*$/)
-      if (dm) { title = dm[1].trim(); date = dm[2] }
-      out.push(
-        <div key={idx} style={{ fontSize: lvl === 1 ? 18 : 16, fontWeight: 800, color: '#f4ead0', letterSpacing: 0.2, margin: idx === 0 ? '0 0 6px' : '16px 0 6px' }}>
-          {inline(title)}
-        </div>
-      )
-      if (date) out.push(
-        <div key={idx + '-d'} style={{ display: 'inline-block', fontSize: 11.5, fontWeight: 600, color: '#c9b48a', background: 'rgba(230,201,148,0.10)', border: '1px solid rgba(212,184,123,0.25)', borderRadius: 8, padding: '3px 10px', letterSpacing: 0.4, marginBottom: 10 }}>{prettyDate(date)}</div>
-      )
+      const dm = h[2].match(/^(.*?)\s*[–—-]\s*(\d{4}-\d{2}-\d{2})\s*$/)
+      if (dm) {
+        out.push(
+          <div key={idx} style={{ fontSize: 18, fontWeight: 800, color: '#f4ead0', letterSpacing: 0.2, margin: idx === 0 ? '0 0 6px' : '16px 0 6px' }}>{inline(dm[1].trim())}</div>
+        )
+        out.push(
+          <div key={idx + '-d'} style={{ display: 'inline-block', fontSize: 11.5, fontWeight: 600, color: '#c9b48a', background: 'rgba(230,201,148,0.10)', border: '1px solid rgba(212,184,123,0.25)', borderRadius: 8, padding: '3px 10px', letterSpacing: 0.4, marginBottom: 10 }}>{prettyDate(dm[2])}</div>
+        )
+      } else {
+        out.push(
+          <div key={idx} style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8, color: '#e6cf94', margin: '18px 0 7px' }}>{inline(h[2])}</div>
+        )
+      }
       return
     }
 

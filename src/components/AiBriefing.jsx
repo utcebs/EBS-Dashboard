@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Sparkles, X, RefreshCw } from 'lucide-react'
-import { fetchPortfolio, dailyBriefing, getCachedBriefing, saveBriefing } from '../aiClient'
+import { generateBriefing, getCachedBriefing } from '../aiClient'
 import MarkdownLite from './MarkdownLite'
 
 const GOLD = 'linear-gradient(135deg, #f3e2b8 0%, #e3c87f 46%, #c79a4e 100%)'
@@ -27,11 +27,10 @@ export default function AiBriefing() {
   async function generate() {
     setLoading(true); setError('')
     try {
-      const data = await fetchPortfolio()
       const today = new Date().toISOString().slice(0, 10)
-      const r = await dailyBriefing(data, today)
-      const saved = await saveBriefing(r.text, r.provider)
-      setBriefing(saved || { content: r.text, provider: r.provider, generated_at: new Date().toISOString() })
+      // Server generates AND caches it (works for guests too).
+      const r = await generateBriefing(today)
+      setBriefing({ content: r.text, provider: r.provider, generated_at: r.generated_at || new Date().toISOString() })
     } catch (e) {
       console.error('Daily briefing failed:', e)
       setError(AI_DOWN)

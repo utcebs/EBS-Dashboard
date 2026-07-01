@@ -95,6 +95,17 @@ export async function dailyBriefing(data, today) {
   return { ...r, text: `# EBS Daily Portfolio Briefing – ${today}\n\n${r.text}` }
 }
 
+// Generate + persist the briefing server-side (Edge Function, service role).
+// Works for guests too — they can regenerate and it's cached for the next
+// visitor — without exposing ai_briefings to arbitrary anonymous writes.
+export async function generateBriefing(today) {
+  const { data, error } = await supabase.functions.invoke('ai', { body: { action: 'briefing', today } })
+  if (error) throw new Error(error.message || 'AI request failed')
+  if (data?.error) throw new Error(data.detail || data.error)
+  if (!data?.text || !String(data.text).trim()) throw new Error('AI returned an empty response')
+  return data // { text, provider, generated_at, id, saved }
+}
+
 // ── Cached briefing (shared across all users, regenerated on demand) ─────────
 export async function getCachedBriefing() {
   const { data } = await supabasePublic

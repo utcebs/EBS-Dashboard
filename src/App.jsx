@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react'
+import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, Suspense } from 'react'
 import { Routes, Route, Link, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { supabase, supabasePublic } from './supabaseClient'
 import LandingPage from './components/LandingPage'
@@ -1693,14 +1693,24 @@ function HexIcon({ icon: Icon }) {
 // Phase stepper — walks the real PHASES, marks done / current ("YOU ARE HERE") / upcoming.
 function PhaseStepper({ phases, current }) {
   const curIdx = phases.indexOf(current)
+  const scrollRef = useRef(null)
+  const curRef = useRef(null)
+  // On open, scroll the horizontal stepper so the current stage is centered
+  // instead of defaulting to the first phase.
+  useLayoutEffect(() => {
+    const c = scrollRef.current, el = curRef.current
+    if (!c || !el) return
+    const cr = c.getBoundingClientRect(), er = el.getBoundingClientRect()
+    c.scrollLeft = Math.max(0, c.scrollLeft + (er.left + er.width / 2) - (cr.left + cr.width / 2))
+  }, [curIdx])
   return (
-    <div className="pd-stepper">
+    <div className="pd-stepper" ref={scrollRef}>
       {phases.map((ph, i) => {
         const state = curIdx === -1 ? 'todo' : i < curIdx ? 'done' : i === curIdx ? 'current' : 'todo'
         return (
           <React.Fragment key={ph}>
             {i > 0 && <div className={`pd-step-line ${i <= curIdx ? 'is-done' : ''}`} />}
-            <div className={`pd-step ${state}`}>
+            <div className={`pd-step ${state}`} ref={state === 'current' ? curRef : undefined}>
               <div className="pd-step-dot">{state === 'done' ? '✓' : i + 1}</div>
               <div className="pd-step-label">{ph}</div>
               <div className="pd-step-here">{state === 'current' ? 'YOU ARE HERE' : ' '}</div>

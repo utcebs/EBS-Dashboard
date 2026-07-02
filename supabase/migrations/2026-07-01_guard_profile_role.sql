@@ -8,9 +8,13 @@
 
 create or replace function public.guard_profile_role()
 returns trigger language plpgsql security definer set search_path = public as $$
-declare caller_is_admin boolean;
+declare caller_is_admin boolean; is_service boolean;
 begin
+  -- The trusted backend (service role, used by the admin-create-user function)
+  -- may set roles; everyone else must already be an admin.
+  is_service := coalesce((nullif(current_setting('request.jwt.claims', true), ''))::jsonb ->> 'role', '') = 'service_role';
   select exists(select 1 from public.profiles where id = auth.uid() and role = 'admin') into caller_is_admin;
+  caller_is_admin := caller_is_admin or is_service;
   if tg_op = 'INSERT' then
     if coalesce(new.role,'user') <> 'user' and not caller_is_admin then
       new.role := 'user';

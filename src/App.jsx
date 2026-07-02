@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, Suspense } from 'react'
 import { Routes, Route, Link, useNavigate, useParams, useLocation } from 'react-router-dom'
-import { supabase, supabasePublic, createEphemeralClient } from './supabaseClient'
+import { supabase, supabasePublic } from './supabaseClient'
 import { fetchPortfolio, mbrContent } from './aiClient'
 import LandingPage from './components/LandingPage'
 import AiBriefing from './components/AiBriefing'
@@ -2958,25 +2958,14 @@ function AdminUsersPage() {
     setError(''); setMessage('')
     if (!newFullName.trim()) { setError('Full name is required'); return }
     try {
-      // Run signUp on a throwaway client so it doesn't sign the admin's own
-      // browser in as the newly created user (GoTrue swaps the active session).
-      const signupClient = createEphemeralClient()
-      const { data, error: err } = await signupClient.auth.signUp({
-        email: newEmail,
-        password: newPassword,
-        options: { data: { full_name: newFullName, role: newRole } }
+      // Create the user via the admin-only edge function (service role). This
+      // keeps the admin's own session intact and works with public signup
+      // disabled at the Auth server.
+      const { data, error: err } = await supabase.functions.invoke('admin-create-user', {
+        body: { email: newEmail, password: newPassword, full_name: newFullName, role: newRole }
       })
       if (err) throw err
-      // Upsert profile with role (trigger may have already created it)
-      if (data?.user?.id) {
-        await supabase.from('profiles').upsert({
-          id: data.user.id,
-          full_name: newFullName,
-          email: newEmail,
-          role: newRole,
-          username: newEmail.split('@')[0]
-        })
-      }
+      if (data?.error) throw new Error(data.error)
       setMessage(`User ${newEmail} created as ${newRole}!`)
       setNewEmail(''); setNewPassword(''); setNewFullName(''); setNewRole('user')
       setShowCreate(false)

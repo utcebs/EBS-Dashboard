@@ -362,7 +362,7 @@ function Modal({ open, onClose, title, children, wide }) {
         <h2 className="text-lg font-semibold font-display text-surface-800">{title}</h2>
         <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-100 text-surface-400 hover:text-surface-600 transition-colors"><X size={18} /></button>
       </div>
-      <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+      <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-5">{children}</div>
     </div>
   </div>
 }

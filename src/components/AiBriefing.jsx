@@ -80,11 +80,11 @@ export default function AiBriefing({ isAdmin }) {
 
       {open && createPortal(
         <div onClick={() => setOpen(false)}
-          style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(8,6,12,0.66)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 16px', overflowY: 'auto' }}>
+          style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(8,6,12,0.66)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 16px', overflowY: 'auto', overscrollBehavior: 'contain' }}>
           <div onClick={(e) => e.stopPropagation()}
-            style={{ width: '100%', maxWidth: 640, background: '#1b1622', border: '1px solid rgba(212,184,123,0.28)', borderRadius: 18, boxShadow: '0 30px 80px -30px rgba(0,0,0,0.9)', color: '#f3efe7' }}>
+            style={{ width: '100%', maxWidth: 640, maxHeight: '85vh', display: 'flex', flexDirection: 'column', background: '#1b1622', border: '1px solid rgba(212,184,123,0.28)', borderRadius: 18, boxShadow: '0 30px 80px -30px rgba(0,0,0,0.9)', color: '#f3efe7' }}>
             {/* header */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, padding: '14px 16px', borderBottom: '1px solid rgba(212,184,123,0.16)' }}>
+            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, padding: '14px 16px', borderBottom: '1px solid rgba(212,184,123,0.16)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                 <span style={{ width: 30, height: 30, borderRadius: 9, background: GOLD, display: 'grid', placeContent: 'center', flexShrink: 0 }}><Sparkles size={16} color="#3a2a08" /></span>
                 <div style={{ minWidth: 0 }}>
@@ -107,7 +107,7 @@ export default function AiBriefing({ isAdmin }) {
               </div>
             </div>
             {/* body */}
-            <div style={{ padding: 18 }}>
+            <div style={{ padding: 18, flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
               {loading && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: '#c9b48a', padding: '24px 0', justifyContent: 'center' }}>
                   <span className="ai-spin" style={{ width: 22, height: 22, border: '2.5px solid rgba(230,201,148,0.25)', borderTopColor: '#e6cf94', borderRadius: '50%', display: 'inline-block' }} />

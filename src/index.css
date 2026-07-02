@@ -3179,6 +3179,59 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
    page itself never scrolls. */
 .dash-list-scroll { max-height: 180px; overflow-y: auto; overflow-x: hidden; padding-right: 2px; }
 
+/* Two-slide dashboard (Overview / Insights) — keyboard ←/→. One slide renders
+   at a time so tall content (the editorial closer) flows to the page normally;
+   overflow-x: clip hides the horizontal slide-in without trapping vertical scroll. */
+.dash-stage { overflow-x: clip; }
+.dash-slide-anim { animation: dashSlideIn 0.36s cubic-bezier(0.22, 0.61, 0.36, 1); }
+@keyframes dashSlideIn { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .dash-slide-anim { animation: none; } }
+.dash-slide-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.dash-slide-dots { display: flex; align-items: center; gap: 6px; }
+.dash-dot { width: 8px; height: 8px; border-radius: 50%; border: none; padding: 0; cursor: pointer; background: rgba(58,47,29,0.2); transition: all 0.25s; }
+.dash-dot.is-active { width: 22px; border-radius: 4px; background: linear-gradient(160deg, #e6cf94, #caa15a); }
+.app-dark .dash-dot { background: rgba(245,230,194,0.22); }
+.app-dark .dash-dot.is-active { background: linear-gradient(160deg, #e6cf94, #caa15a); }
+.dash-slide-toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 9px; cursor: pointer; color: #7a5a26; border: 1px solid rgba(154,115,53,0.25); background: rgba(154,115,53,0.05); }
+.dash-slide-toggle:hover { background: rgba(154,115,53,0.1); }
+.app-dark .dash-slide-toggle { color: #e6cf94; border-color: rgba(212,184,123,0.25); background: rgba(212,184,123,0.06); }
+.app-dark .dash-slide-toggle:hover { background: rgba(212,184,123,0.12); }
+.dash-slide-hint { font-size: 11px; color: rgba(58,47,29,0.4); }
+.app-dark .dash-slide-hint { color: rgba(245,230,194,0.35); }
+
+/* Equal-height list/bar cards: header fixed, body fills + scrolls so the row
+   looks finished (no ragged bottoms). */
+.dash-panel { display: flex; flex-direction: column; }
+.dash-panel .dash-list-scroll { flex: 1 1 auto; max-height: none; min-height: 0; }
+
+/* Horizontal bar lists (Top Owners / Priority Mix) */
+.dash-barlist { display: flex; flex-direction: column; gap: 7px; }
+.dash-bar-row { display: grid; grid-template-columns: 42% 1fr auto; align-items: center; gap: 10px; width: 100%; padding: 5px 6px; border: none; border-radius: 8px; background: transparent; cursor: pointer; text-align: left; }
+.dash-bar-row:hover { background: rgba(154,115,53,0.07); }
+.app-dark .dash-bar-row:hover { background: rgba(212,184,123,0.08); }
+.dash-bar-label { font-size: 12.5px; color: rgba(58,47,29,0.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-dark .dash-bar-label { color: rgba(245,230,194,0.85); }
+.dash-bar-track { height: 8px; border-radius: 6px; overflow: hidden; background: rgba(58,47,29,0.08); }
+.app-dark .dash-bar-track { background: rgba(255,255,255,0.08); }
+.dash-bar-fill { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, #caa15a, #e6cf94); }
+.dash-bar-value { font-size: 12.5px; font-weight: 700; color: #7a5a26; min-width: 20px; text-align: right; }
+.app-dark .dash-bar-value { color: #e6cf94; }
+
+/* Slide content stacks with even spacing; the bottom row is a fixed height so
+   the cards finish neatly (not stretched to the fold, not spilling past it). */
+.dash-screen { display: flex; flex-direction: column; gap: 1.25rem; }
+
+/* At-a-glance recap (Insights bottom-right) */
+.dash-recap { display: flex; flex-direction: column; gap: 4px; }
+.dash-recap-row { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 10px; padding: 7px 4px; }
+.dash-recap-dot { width: 9px; height: 9px; border-radius: 50%; }
+.dash-recap-label { font-size: 13px; color: rgba(58,47,29,0.8); }
+.app-dark .dash-recap-label { color: rgba(245,230,194,0.85); }
+.dash-recap-value { font-size: 15px; font-weight: 700; color: #7a5a26; }
+.app-dark .dash-recap-value { color: #f7f2e7; }
+.dash-recap-pct { font-size: 12px; color: rgba(58,47,29,0.5); min-width: 34px; text-align: right; }
+.app-dark .dash-recap-pct { color: rgba(245,230,194,0.5); }
+
 /* Dashboard chart cards → champagne accent (overrides the violet/rose/etc.
    per-accent hues) so the dark board stays monochrome-gold like the reference. */
 .app-dark [data-accent="trend"]    { --acc-color: 212,184,123; }

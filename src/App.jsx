@@ -1202,7 +1202,26 @@ function Dashboard() {
   const { projects, projectsLoading, projectsError, refreshProjects } = useProjects()
   const [drillDown, setDrillDown] = useState(null) // { title, projects }
   const [selectedProjectId, setSelectedProjectId] = useState('')
+  const [slide, setSlide] = useState(0) // 0 = Overview, 1 = Insights
+  const [milestones, setMilestones] = useState([]) // powers the Insights (Delivery) slide
   const navigate = useNavigate()
+
+  // Left/Right arrow keys flip between the two dashboard slides (ignored while
+  // typing in a field).
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = (e.target?.tagName || '').toLowerCase()
+      if (tag === 'input' || tag === 'select' || tag === 'textarea' || e.target?.isContentEditable) return
+      if (e.key === 'ArrowRight') setSlide(1)
+      else if (e.key === 'ArrowLeft') setSlide(0)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  useEffect(() => {
+    supabasePublic.from('milestones').select('*').then(({ data }) => setMilestones(data || []))
+  }, [])
 
   if (projectsLoading) return <Spinner />
   if (projectsError) return <EmptyState icon={AlertCircle} title="Failed to load projects" description={projectsError} action={<button onClick={refreshProjects} className="text-brand-600 text-sm font-medium">Try again</button>} />
@@ -1224,6 +1243,46 @@ function Dashboard() {
   const atRiskList = projects.filter(p => p.status === 'At Risk' || p.status === 'Delayed')
   const recentlyUpdated = [...projects].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at)).slice(0, 5)
 
+  // ── Slide 2 (Insights) metrics ──
+  const numPct = (v) => v === 'Ongoing' ? 50 : parseInt(v) || 0
+  const avgCompletion = total ? Math.round(projects.reduce((s, p) => s + numPct(p.percent_complete), 0) / total) : 0
+  const totalCostKwd = projects.reduce((s, p) => s + (parseFloat(p.total_cost_kwd) || 0), 0)
+  const moduleCount = new Set(projects.map(p => p.dept_module).filter(Boolean)).size
+  const fmtK = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n))
+  const maxOwner = ownerData.length ? ownerData[0].value : 1
+  const maxPriority = byPriority.reduce((m, p) => Math.max(m, p.value), 1)
+  const maxPhase = byPhase.reduce((m, p) => Math.max(m, p.value), 1)
+  const PRI_BAR = { Critical: '#ef4444', High: '#f59e0b', Medium: '#3b82f6', Low: '#10b981' }
+  // ── Insights (Delivery & Actions) ──
+  const projName = {}
+  projects.forEach(p => { projName[p.id] = p.project_name })
+  const parseD = (s) => (s ? new Date(s) : null)
+  const today0 = new Date(); today0.setHours(0, 0, 0, 0)
+  const soon = new Date(today0); soon.setDate(soon.getDate() + 60)
+  const fmtDay = (s) => { const d = parseD(s); return d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '' }
+  const upcomingMs = milestones
+    .filter(m => { const t = parseD(m.target_date); return t && !m.actual_date && t >= today0 && t <= soon })
+    .sort((a, b) => parseD(a.target_date) - parseD(b.target_date))
+  const overdueMs = milestones
+    .filter(m => { const t = parseD(m.target_date); return t && !m.actual_date && t < today0 })
+    .sort((a, b) => parseD(a.target_date) - parseD(b.target_date))
+  const watchMs = [...overdueMs, ...upcomingMs] // overdue (oldest first) then upcoming (soonest first)
+  const completedMs = milestones.filter(m => m.actual_date && m.target_date)
+  const onTimeMs = completedMs.filter(m => parseD(m.actual_date) <= parseD(m.target_date))
+  // Everything that was DUE by now = delivered + still-overdue. On-time% is
+  // measured against that, so it reconciles with the overdue count (an overdue
+  // milestone is, by definition, not on time).
+  const dueCount = completedMs.length + overdueMs.length
+  const onTimeRate = dueCount ? Math.round(onTimeMs.length / dueCount * 100) : null
+  const blockedProjects = projects.filter(p => p.dependencies && String(p.dependencies).trim().length > 3)
+  const decisionProjects = projects.filter(p => p.actions_needed && String(p.actions_needed).trim().length > 8)
+  const secondaryStats = [
+    { key: 'ontime', label: 'On-Time Delivery', value: onTimeRate == null ? '—' : onTimeRate + '%', icon: CheckCircle2 },
+    { key: 'overdue', label: 'Overdue', value: overdueMs.length, icon: Clock },
+    { key: 'blocked', label: 'Blocked', value: blockedProjects.length, icon: AlertTriangle },
+    { key: 'decisions', label: 'Decisions Needed', value: decisionProjects.length, icon: FileWarning },
+  ]
+
   // Drill-down handlers
   const drillStatus = (status) => {
     const filtered = projects.filter(p => p.status === status)
@@ -1242,11 +1301,14 @@ function Dashboard() {
     setDrillDown({ title: `Owner: ${owner} (${filtered.length})`, projects: filtered })
   }
 
+  // "Open" = anything not Completed; "Closed" = Completed. Open + Closed = total.
+  const openList = projects.filter(p => p.status !== 'Completed')
+  const openCount = openList.length
   const summaryCards = [
-    { kpi: 'total',     label: 'Total Projects',     value: total,     icon: FolderKanban,    sub: `${ownerCount} owner${ownerCount === 1 ? '' : 's'}`, onClick: () => setDrillDown({ title: `All Projects (${total})`, projects }) },
+    { kpi: 'total',     label: 'Open Projects',      value: openCount, icon: FolderKanban,    sub: `of ${total} total`, onClick: () => setDrillDown({ title: `Open Projects (${openCount})`, projects: openList }) },
     { kpi: 'onTrack',   label: 'On Track',           value: onTrack,   icon: CheckCircle2,    sub: `${pct(onTrack)}% of total`,   onClick: () => drillStatus('On Track') },
     { kpi: 'atRisk',    label: 'At Risk / Delayed',  value: atRisk,    icon: AlertTriangle,   sub: `${pct(atRisk)}% of total`,    onClick: () => setDrillDown({ title: `At Risk & Delayed (${atRiskList.length})`, projects: atRiskList }) },
-    { kpi: 'completed', label: 'Completed',          value: completed, icon: Target,          sub: `${pct(completed)}% of total`, onClick: () => drillStatus('Completed') },
+    { kpi: 'completed', label: 'Closed',             value: completed, icon: Target,          sub: `${pct(completed)}% of total`, onClick: () => setDrillDown({ title: `Closed Projects (${completed})`, projects: projects.filter(p => p.status === 'Completed') }) },
     { kpi: 'onHold',    label: 'On Hold',            value: onHold,    icon: Pause,           sub: `${pct(onHold)}% of total`,    onClick: () => drillStatus('On Hold') },
   ]
 
@@ -1325,10 +1387,10 @@ function Dashboard() {
 
   return <div className="dash-wrap">
     {/* Header — compact, no oversized logo so the grid sits higher on screen */}
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
       <div>
         <h1 className="page-title-gold text-2xl font-bold font-display text-surface-900">Projects Dashboard</h1>
-        <p className="text-sm text-surface-500 mt-0.5">Click any card, chart, or row to drill into projects</p>
+        <p className="text-sm text-surface-500 mt-0.5">{slide === 0 ? 'Click any card, chart, or row to drill into projects' : 'Owners & priority breakdown'}</p>
       </div>
       {/* Project-level dashboard selector */}
       <div className="flex flex-wrap items-center gap-2">
@@ -1342,8 +1404,26 @@ function Dashboard() {
       </div>
     </div>
 
+    {/* Slide switcher — dots + toggle, keyboard ←/→ */}
+    <div className="dash-slide-nav">
+      <div className="dash-slide-dots">
+        <button className={`dash-dot ${slide === 0 ? 'is-active' : ''}`} onClick={() => setSlide(0)} aria-label="Overview" title="Overview" />
+        <button className={`dash-dot ${slide === 1 ? 'is-active' : ''}`} onClick={() => setSlide(1)} aria-label="Insights" title="Insights" />
+      </div>
+      <button className="dash-slide-toggle" onClick={() => setSlide(slide === 0 ? 1 : 0)}>
+        {slide === 0 ? <>Insights <ChevronRight size={14} /></> : <><ChevronLeft size={14} /> Overview</>}
+      </button>
+      <span className="dash-slide-hint">Use ← / → keys</span>
+    </div>
+
+    <div className="dash-stage">
+      {slide === 0 ? (
+        /* ══ Overview ══ */
+        <div key="overview" className="dash-slide-anim">
+        <div className="dash-screen">
+
     {/* KPI summary row — gold icon-chip, gold value, sub-stat (reference "Today's Summary") */}
-    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-5 stagger">
+    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 stagger shrink-0">
       {summaryCards.map(({ kpi, label, value, icon: Icon, sub, onClick }) => (
         <div key={label} data-kpi={kpi} onClick={onClick} title={`${label}: ${value} — click to view`}
           className="dash-kpi bg-white rounded-2xl p-4 border border-surface-200 shadow-sm animate-fade-in cursor-pointer group">
@@ -1367,7 +1447,7 @@ function Dashboard() {
     {/* Hero charts — Project Activity (line) + Status/Priority tabbed donut.
         recharts ships in its own chunk; Suspense covers the gap until it arrives. */}
     <Suspense fallback={<div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5"><div className="bg-white rounded-2xl border border-surface-200 h-[316px] lg:col-span-2 animate-pulse" /><div className="bg-white rounded-2xl border border-surface-200 h-[316px] animate-pulse" /></div>}>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 shrink-0">
         <DashboardCharts section="trend" trendData={trendData} className="lg:col-span-2" />
         <DashboardCharts section="statusPriority"
           byStatus={byStatus} byPriority={byPriority}
@@ -1376,8 +1456,8 @@ function Dashboard() {
     </Suspense>
 
     {/* Lists row — At Risk / Recently Updated / Top Owners (reference alerts + suppliers) */}
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
-      <div className="bg-white rounded-2xl p-5 border border-surface-200 shadow-sm">
+    <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-1 gap-5 shrink-0 lg:h-[240px]">
+      <div className="dash-panel bg-white rounded-2xl p-5 border border-surface-200 shadow-sm">
         <h3 className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2"><AlertTriangle size={15} className="text-red-400" /> At Risk &amp; Delayed</h3>
         {atRiskList.length === 0 ? (
           <p className="text-sm text-surface-400 py-4">No at-risk or delayed projects</p>
@@ -1394,7 +1474,7 @@ function Dashboard() {
         )}
       </div>
 
-      <div className="bg-white rounded-2xl p-5 border border-surface-200 shadow-sm">
+      <div className="dash-panel bg-white rounded-2xl p-5 border border-surface-200 shadow-sm">
         <h3 className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2"><Clock size={15} className="text-brand-400" /> Recently Updated</h3>
         <div className="space-y-2 dash-list-scroll">
           {recentlyUpdated.map(p => (
@@ -1413,8 +1493,9 @@ function Dashboard() {
       </Suspense>
     </div>
 
-    {/* Editorial closer — projects whose start_date is the current month
-        (kept below the fold, original formation — visible on scroll). */}
+        </div>{/* end dash-screen (Overview) */}
+
+    {/* Editorial closer — original "Starting This Month" (unchanged) */}
     <section className="dash-month-section">
       <div className="dash-month-eyebrow">Starting This Month</div>
       <h2 className="dash-month-title">{monthName}<span className="yr">'{String(now.getFullYear()).slice(2)}</span></h2>
@@ -1437,6 +1518,108 @@ function Dashboard() {
         </div>
       )}
     </section>
+
+        </div>
+      ) : (
+        /* ══ Insights ══ */
+        <div key="insights" className="dash-slide-anim">
+        <div className="dash-screen">
+          {/* Secondary KPI strip */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
+            {secondaryStats.map(({ key, label, value, icon: Icon }) => (
+              <div key={key} data-kpi={key} className="dash-kpi bg-white rounded-2xl p-4 border border-surface-200 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <span className="dash-kpi-chip"><Icon size={20} strokeWidth={1.75} /></span>
+                  <div className="min-w-0"><p className="dash-kpi-value">{value}</p><p className="dash-kpi-label">{label}</p></div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Upcoming milestones + On-time delivery (mirrors the Overview charts row) */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-1 gap-5 shrink-0 lg:h-[316px]">
+            <div className="dash-panel bg-white rounded-2xl p-5 border border-surface-200 shadow-sm lg:col-span-2">
+              <h3 className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2"><Clock size={15} className="text-brand-400" /> Milestones · Overdue &amp; Upcoming</h3>
+              {watchMs.length === 0 ? <p className="text-sm text-surface-400 py-4">No overdue or upcoming milestones.</p> : (
+                <div className="space-y-2 dash-list-scroll">
+                  {watchMs.map((m, i) => {
+                    const late = parseD(m.target_date) < today0
+                    return (
+                    <div key={m.id || i} onClick={() => navigate(`/projects/${m.project_id}`)} title={`${m.deliverable || 'Milestone'} — ${projName[m.project_id] || ''}`}
+                      className="dash-row flex items-center justify-between gap-3 p-2.5 rounded-xl bg-surface-50 hover:bg-brand-50/50 cursor-pointer transition-all group">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-surface-800 truncate">{m.deliverable || 'Milestone'}</p>
+                        <p className="text-xs text-surface-500 truncate">{projName[m.project_id] || 'Unknown project'}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs font-semibold whitespace-nowrap" style={{ color: late ? '#ef4444' : '#caa15a' }}>{late ? 'Overdue · ' : ''}{fmtDay(m.target_date)}</span>
+                        <ChevronRight size={14} className="text-surface-300 group-hover:text-brand-400" />
+                      </div>
+                    </div>
+                  )})}
+                </div>
+              )}
+            </div>
+            <div className="dash-panel bg-white rounded-2xl p-5 border border-surface-200 shadow-sm">
+              <h3 className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2"><CheckCircle2 size={15} className="text-brand-400" /> On-Time Delivery</h3>
+              {completedMs.length === 0 ? <p className="text-sm text-surface-400 py-4">No delivered milestones yet.</p> : (
+                <div className="flex-1 flex flex-col">
+                  <div className="text-center pt-2">
+                    <div style={{ fontSize: 44, fontWeight: 800, color: '#caa15a', lineHeight: 1 }}>{onTimeRate == null ? '—' : onTimeRate + '%'}</div>
+                    <div className="text-xs text-surface-500 mt-1.5">of {dueCount} due milestones delivered on time</div>
+                  </div>
+                  <div className="mt-4">
+                    <span className="dash-bar-track block" style={{ height: 10 }}><span className="dash-bar-fill" style={{ width: `${onTimeRate || 0}%`, background: 'linear-gradient(90deg,#10b981,#34d399)' }} /></span>
+                    <div className="flex justify-between mt-2 text-xs">
+                      <span style={{ color: '#10b981' }}>On time · {onTimeMs.length}</span>
+                      <span style={{ color: '#f59e0b' }}>Late · {completedMs.length - onTimeMs.length}</span>
+                      <span style={{ color: '#ef4444' }}>Overdue · {overdueMs.length}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Bottom row — Blocked/Dependencies + Decisions Required */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-1 gap-5 shrink-0 lg:h-[240px]">
+            <div className="dash-panel bg-white rounded-2xl p-5 border border-surface-200 shadow-sm">
+              <h3 className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2"><AlertTriangle size={15} className="text-amber-400" /> Blocked / Dependencies</h3>
+              {blockedProjects.length === 0 ? <p className="text-sm text-surface-400 py-4">Nothing blocked.</p> : (
+                <div className="space-y-2 dash-list-scroll">
+                  {blockedProjects.map(p => (
+                    <div key={p.id} onClick={() => navigate(`/projects/${p.id}`)} title={p.dependencies}
+                      className="dash-row p-2.5 rounded-xl bg-surface-50 hover:bg-amber-50/50 cursor-pointer transition-all">
+                      <p className="text-sm font-medium text-surface-800 truncate">{p.project_name}</p>
+                      <p className="text-xs text-surface-500 truncate">{p.dependencies}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="dash-panel bg-white rounded-2xl p-5 border border-surface-200 shadow-sm lg:col-span-2">
+              <h3 className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2"><FileWarning size={15} className="text-brand-400" /> Decisions Required</h3>
+              {decisionProjects.length === 0 ? <p className="text-sm text-surface-400 py-4">No pending decisions.</p> : (
+                <div className="space-y-2 dash-list-scroll">
+                  {decisionProjects.map(p => (
+                    <div key={p.id} onClick={() => navigate(`/projects/${p.id}`)} title={p.actions_needed}
+                      className="dash-row flex items-start justify-between gap-3 p-2.5 rounded-xl bg-surface-50 hover:bg-brand-50/50 cursor-pointer transition-all group">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-surface-800 truncate">{p.project_name}</p>
+                        <p className="text-xs text-surface-500 truncate">{p.actions_needed}</p>
+                      </div>
+                      <ChevronRight size={14} className="text-surface-300 group-hover:text-brand-400 shrink-0 mt-0.5" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>{/* end dash-screen (Insights) */}
+        </div>
+      )}
+    </div>{/* end dash-stage */}
 
     {/* Drill-down modal */}
     <DrillDownModal open={!!drillDown} onClose={() => setDrillDown(null)}

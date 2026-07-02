@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useLayoutEffect,
 import { Routes, Route, Link, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { supabase, supabasePublic } from './supabaseClient'
 import { fetchPortfolio, mbrContent } from './aiClient'
+import { lockBackground, unlockBackground } from './overlay'
 import LandingPage from './components/LandingPage'
 import AiBriefing from './components/AiBriefing'
 import AiChatbot from './components/AiChatbot'
@@ -349,9 +350,10 @@ function Modal({ open, onClose, title, children, wide }) {
   // in-progress edits. X button + ESC are the only close paths.
   useEffect(() => {
     if (!open) return
+    lockBackground()
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    return () => { document.removeEventListener('keydown', onKey); unlockBackground() }
   }, [open, onClose])
   if (!open) return null
   return <div className="fixed inset-0 z-50 flex items-start justify-center pt-[5vh] modal-backdrop">
@@ -369,9 +371,10 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message }) {
   // Same close-path rules as Modal — Cancel button or ESC, never backdrop.
   useEffect(() => {
     if (!open) return
+    lockBackground()
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    return () => { document.removeEventListener('keydown', onKey); unlockBackground() }
   }, [open, onClose])
   if (!open) return null
   return <div className="fixed inset-0 z-[60] flex items-center justify-center modal-backdrop">
@@ -1213,6 +1216,7 @@ function Dashboard() {
     const onKey = (e) => {
       const tag = (e.target?.tagName || '').toLowerCase()
       if (tag === 'input' || tag === 'select' || tag === 'textarea' || e.target?.isContentEditable) return
+      if (document.body.dataset.modalOpen) return // a modal/pop-up is open — don't move slides
       if (e.key === 'ArrowRight') setSlide(1)
       else if (e.key === 'ArrowLeft') setSlide(0)
     }

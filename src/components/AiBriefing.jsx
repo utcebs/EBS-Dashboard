@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Sparkles, X, RefreshCw } from 'lucide-react'
 import { generateBriefing, getCachedBriefing } from '../aiClient'
+import { lockBackground, unlockBackground } from '../overlay'
 import MarkdownLite from './MarkdownLite'
 
 const GOLD = 'linear-gradient(135deg, #f3e2b8 0%, #e3c87f 46%, #c79a4e 100%)'
@@ -47,6 +48,14 @@ export default function AiBriefing({ isAdmin }) {
     })()
     return () => { cancelled = true }
   }, [])
+
+  // While the modal is open, freeze the dashboard behind it (no arrow-key slide
+  // navigation, no background scroll).
+  useEffect(() => {
+    if (!open) return
+    lockBackground()
+    return () => unlockBackground()
+  }, [open])
 
   // Admin-only manual regenerate (server verifies the admin token).
   async function regenerate() {

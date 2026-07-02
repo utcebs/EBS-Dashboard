@@ -709,6 +709,40 @@ function makeSilverGradient(w = 1333, h = 750) {
   return c.toDataURL('image/png')
 }
 
+// Tint a black-silhouette PNG (Union / UJ logos) to a solid color so it reads on
+// dark slides, preserving the shape's transparency. Returns a data URL (or null).
+function tintPng(dataUrl, color) {
+  return new Promise((resolve) => {
+    if (!dataUrl) { resolve(null); return }
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas'); c.width = img.width; c.height = img.height
+        const ctx = c.getContext('2d')
+        ctx.drawImage(img, 0, 0)
+        ctx.globalCompositeOperation = 'source-in'
+        ctx.fillStyle = color
+        ctx.fillRect(0, 0, c.width, c.height)
+        resolve(c.toDataURL('image/png'))
+      } catch { resolve(null) }
+    }
+    img.onerror = () => resolve(null)
+    img.src = dataUrl
+  })
+}
+
+// Deep plum background with a soft warm-gold glow (divider slide).
+function makeDarkGlow(w = 1333, h = 750) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#17131e'; ctx.fillRect(0, 0, w, h)
+  const g = ctx.createRadialGradient(w * 0.5, h * 0.46, h * 0.05, w * 0.5, h * 0.5, w * 0.62)
+  g.addColorStop(0, 'rgba(202,161,90,0.18)')
+  g.addColorStop(1, 'rgba(202,161,90,0)')
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+  return c.toDataURL('image/png')
+}
+
 // ─── PPTX Report Generation — one-slide "EBS Updates" MBR ─────────────────
 // A single executive slide: title + subtitle + logo, thick divider, then a
 // 3×2 panel grid. Portfolio Status (top-left) is drawn from real counts; the
@@ -770,14 +804,18 @@ async function generateReport(projects) {
     decisions: pick(ai && ai.decisions, fb.decisions),
   }
 
-  // ── Intro slides (Union-branded) ──
-  // Load the Union wordmark once; shared by both intro slides. Frame + logo
-  // helpers keep the two slides identical in chrome.
+  // ── Theme (refined black / white / grey — editorial) ──
+  const INK = '141414', BODY = '3C3C3C', MUTED = '6B7280', LINE = 'DCDAD3', PANEL = 'F6F5F1'
+
+  // Logos: black-on-transparent reads on white; white-tinted for the black divider.
   const unionLogo = await loadImageDataURL(['./union-logo.png', './union-logo.jpg'])
+  const ujLogo = await loadImageDataURL(['./mbr-logo.png', './mbr-logo.jpg'])
+  const unionWhite = await tintPng(unionLogo, '#ffffff')
   const uH = 0.82, uW = uH * (1571 / 662)   // wordmark aspect ≈ 2.37:1
-  const drawUnion = (sl) => {
-    if (unionLogo) { try { sl.addImage({ data: unionLogo, x: 0.62, y: 0.5, w: uW, h: uH }) } catch { /* ignore */ } }
-    else sl.addText('UNION', { x: 0.62, y: 0.5, w: 3, h: 0.7, fontSize: 26, bold: true, color: '000000', fontFace: FONT })
+  const drawUnion = (sl, light) => {
+    const img = light ? unionWhite : unionLogo
+    if (img) { try { sl.addImage({ data: img, x: 0.62, y: 0.5, w: uW, h: uH }) } catch { /* ignore */ } }
+    else sl.addText('UNION', { x: 0.62, y: 0.5, w: 3, h: 0.7, fontSize: 26, bold: true, color: light ? 'FFFFFF' : INK, fontFace: FONT })
   }
 
   // Fiscal-quarter title line (FY starts in April, e.g. Apr 2026 → Q1 FY26).
@@ -788,32 +826,31 @@ async function generateReport(projects) {
   const ord = (d) => { const t = d % 100; return d + (['th', 'st', 'nd', 'rd'][(t - 20) % 10] || ['th', 'st', 'nd', 'rd'][t] || 'th') }
   const dateLine = `${now.toLocaleDateString('en-US', { month: 'long' })} ${ord(now.getDate())}, ${now.getFullYear()}`
 
-  // Intro slide 1 — title (white, black frame, black rounded panel)
+  // Intro slide 1 — title (clean white, black type + hairline rules)
   const s1 = pptx.addSlide(); s1.background = { color: 'FFFFFF' }
-  drawUnion(s1)
-  s1.addShape(pptx.shapes.ROUNDED_RECTANGLE, { x: 0.5, y: 3.15, w: 12.33, h: 3.85, rectRadius: 0.16, fill: { color: '000000' } })
-  s1.addText(`${quarterLine}\nMonthly Business Performance Review`, { x: 1.0, y: 3.7, w: 11.0, h: 1.5, fontSize: 30, bold: true, color: 'FFFFFF', lineSpacingMultiple: 1.15, valign: 'top', fontFace: FONT })
-  s1.addText(dateLine, { x: 1.0, y: 6.32, w: 6, h: 0.4, fontSize: 15, color: 'FFFFFF', fontFace: FONT })
+  drawUnion(s1, false)
+  s1.addText('MONTHLY BUSINESS PERFORMANCE REVIEW', { x: 0.72, y: 2.7, w: 11, h: 0.35, fontSize: 13, color: MUTED, charSpacing: 3, fontFace: FONT })
+  s1.addShape(pptx.shapes.RECTANGLE, { x: 0.74, y: 3.16, w: 0.62, h: 0.03, fill: { color: INK } })
+  s1.addText(quarterLine, { x: 0.68, y: 3.48, w: 11.6, h: 1.3, fontSize: 54, bold: true, color: INK, fontFace: FONT })
+  s1.addShape(pptx.shapes.RECTANGLE, { x: 0.74, y: 4.98, w: 12.05, h: 0.012, fill: { color: LINE } })
+  s1.addText(dateLine, { x: 0.72, y: 5.12, w: 6, h: 0.4, fontSize: 15, color: BODY, fontFace: FONT })
+  s1.addText('EBS — Enterprise Business Solutions', { x: 0.72, y: 5.5, w: 8, h: 0.35, fontSize: 13, color: MUTED, fontFace: FONT })
 
-  // Intro slide 2 — section divider (silver gradient, centered "EBS Updates")
-  const s2 = pptx.addSlide()
-  const silver = (() => { try { return makeSilverGradient() } catch { return null } })()
-  if (silver) { try { s2.addImage({ data: silver, x: 0, y: 0, w: 13.33, h: 7.5 }) } catch { s2.background = { color: 'D9D9D9' } } }
-  else s2.background = { color: 'D9D9D9' }
-  drawUnion(s2)
-  s2.addText('EBS Updates', { x: 0, y: 3.25, w: 13.33, h: 1.0, fontSize: 34, bold: true, color: '111111', align: 'center', valign: 'middle', fontFace: FONT })
+  // Intro slide 2 — section divider (solid black, white type)
+  const s2 = pptx.addSlide(); s2.background = { color: '111111' }
+  drawUnion(s2, true)
+  s2.addText('EBS Updates', { x: 0, y: 3.12, w: 13.33, h: 1.0, fontSize: 42, bold: true, color: 'FFFFFF', align: 'center', valign: 'middle', fontFace: FONT })
+  s2.addShape(pptx.shapes.RECTANGLE, { x: 6.17, y: 4.2, w: 1.0, h: 0.03, fill: { color: 'FFFFFF' } })
 
-  // ── Slide 3: the one-slide MBR ──
+  // ── Slide 3: the one-slide MBR (content — all the data) ──
   const s = pptx.addSlide(); s.background = { color: 'FFFFFF' }
-  // Title + subtitle + logo (public/mbr-logo.png = the UJ mark; falls back to a wordmark)
-  s.addText('EBS Updates', { x: 0.5, y: 0.22, w: 9, h: 0.6, fontSize: 30, bold: true, color: '141414', fontFace: FONT })
+  s.addText('EBS Updates', { x: 0.5, y: 0.22, w: 9, h: 0.6, fontSize: 30, bold: true, color: INK, fontFace: FONT })
   s.addText(`EBS Project Portfolio   |   ${currentMonth} ${currentYear}   |   Monthly Business Review`,
-    { x: 0.52, y: 0.86, w: 10.6, h: 0.34, fontSize: 13, color: '555555', fontFace: FONT })
-  const logo = await loadImageDataURL(['./mbr-logo.png', './mbr-logo.jpg'])
-  if (logo) { try { s.addImage({ data: logo, x: 12.11, y: 0.2, w: 0.72, h: 0.82 }) } catch { /* ignore */ } }
-  else s.addText('EBS', { x: 11.6, y: 0.3, w: 1.4, h: 0.6, fontSize: 26, bold: true, color: 'CAA15A', align: 'right', valign: 'middle', fontFace: FONT })
-  // Thick divider under the header
-  s.addShape(pptx.shapes.RECTANGLE, { x: 0.5, y: 1.42, w: 12.33, h: 0.03, fill: { color: '141414' } })
+    { x: 0.52, y: 0.86, w: 10.6, h: 0.34, fontSize: 13, color: MUTED, fontFace: FONT })
+  if (ujLogo) { try { s.addImage({ data: ujLogo, x: 12.11, y: 0.2, w: 0.72, h: 0.82 }) } catch { /* ignore */ } }
+  else s.addText('EBS', { x: 11.6, y: 0.3, w: 1.4, h: 0.6, fontSize: 26, bold: true, color: INK, align: 'right', valign: 'middle', fontFace: FONT })
+  // Thin black rule under the header
+  s.addShape(pptx.shapes.RECTANGLE, { x: 0.5, y: 1.42, w: 12.33, h: 0.028, fill: { color: INK } })
 
   // Grid geometry — 3 columns × 2 rows
   const colW = 3.9, gap = 0.315
@@ -822,8 +859,8 @@ async function generateReport(projects) {
   const botTitleY = 4.5, botBoxY = 4.84
   // Faint grid dividers (2 vertical + 1 horizontal), like the reference
   ;[cx[1] - gap / 2, cx[2] - gap / 2].forEach(vx =>
-    s.addShape(pptx.shapes.RECTANGLE, { x: vx, y: 1.55, w: 0.01, h: 5.65, fill: { color: 'C9C9C9' } }))
-  s.addShape(pptx.shapes.RECTANGLE, { x: 0.5, y: 4.42, w: 12.33, h: 0.01, fill: { color: 'C9C9C9' } })
+    s.addShape(pptx.shapes.RECTANGLE, { x: vx, y: 1.55, w: 0.01, h: 5.65, fill: { color: LINE } }))
+  s.addShape(pptx.shapes.RECTANGLE, { x: 0.5, y: 4.42, w: 12.33, h: 0.01, fill: { color: LINE } })
 
   // PowerPoint's autofit ("shrink text on overflow") isn't applied until the box
   // is edited, so a freshly-opened deck overflows. Instead we measure the content
@@ -847,8 +884,8 @@ async function generateReport(projects) {
   // Grey panel: bold title + rounded box + bulleted rich text (bold lead — detail)
   const panel = (x, titleY, boxY2, title, items, opts) => {
     const { bulletCode = '2022', max = 7 } = (opts || {})
-    s.addText(title, { x: x + 0.04, y: titleY, w: colW - 0.08, h: 0.32, fontSize: 13.5, bold: true, color: '1A1A1A', valign: 'middle', fontFace: FONT })
-    s.addShape(pptx.shapes.ROUNDED_RECTANGLE, { x, y: boxY2, w: colW, h: boxH, rectRadius: 0.09, fill: { color: 'E6E6E6' }, line: { type: 'none' } })
+    s.addText(title, { x: x + 0.04, y: titleY, w: colW - 0.08, h: 0.32, fontSize: 13, bold: true, color: INK, charSpacing: 0.4, valign: 'middle', fontFace: FONT })
+    s.addShape(pptx.shapes.ROUNDED_RECTANGLE, { x, y: boxY2, w: colW, h: boxH, rectRadius: 0.06, fill: { color: PANEL }, line: { color: LINE, width: 0.75 } })
     const rows = (items && items.length ? items : [{ lead: '', detail: 'Nothing to report this month' }]).slice(0, max)
     const textW = colW - 0.44
     const F = fitFont(rows, boxH - 0.34, textW)
@@ -856,17 +893,17 @@ async function generateReport(projects) {
     rows.forEach(it => {
       const lead = clip(it.lead, 40), detail = clip(it.detail, 88)
       if (lead && detail) {
-        runs.push({ text: lead, options: { bold: true, bullet: { code: bulletCode, indent: 13 }, color: '1E2230', paraSpaceAfter: SPACE_AFTER } })
-        runs.push({ text: ' — ' + detail, options: { color: '3C3C3C', breakLine: true } })
+        runs.push({ text: lead, options: { bold: true, bullet: { code: bulletCode, indent: 13 }, color: INK, paraSpaceAfter: SPACE_AFTER } })
+        runs.push({ text: ' — ' + detail, options: { color: BODY, breakLine: true } })
       } else {
-        runs.push({ text: lead || detail, options: { bold: !!lead, bullet: { code: bulletCode, indent: 13 }, color: '1E2230', paraSpaceAfter: SPACE_AFTER, breakLine: true } })
+        runs.push({ text: lead || detail, options: { bold: !!lead, bullet: { code: bulletCode, indent: 13 }, color: INK, paraSpaceAfter: SPACE_AFTER, breakLine: true } })
       }
     })
-    s.addText(runs, { x: x + 0.24, y: boxY2 + 0.15, w: textW, h: boxH - 0.28, fontSize: F, color: '3C3C3C', valign: 'top', lineSpacingMultiple: 1.0, fontFace: FONT })
+    s.addText(runs, { x: x + 0.24, y: boxY2 + 0.15, w: textW, h: boxH - 0.28, fontSize: F, color: BODY, valign: 'top', lineSpacingMultiple: 1.0, fontFace: FONT })
   }
 
   // Top-left: Portfolio Status — colored count bars + total + roadmap link
-  s.addText('Portfolio Status', { x: cx[0], y: topTitleY, w: colW, h: 0.32, fontSize: 13.5, bold: true, color: '1A1A1A', align: 'center', valign: 'middle', fontFace: FONT })
+  s.addText('Portfolio Status', { x: cx[0], y: topTitleY, w: colW, h: 0.32, fontSize: 13, bold: true, color: INK, charSpacing: 0.4, align: 'center', valign: 'middle', fontFace: FONT })
   const statusRows = [
     ['On Track', cnt('On Track'), '10B981', 'D1FAE5'],
     ['At Risk', cnt('At Risk'), 'F59E0B', 'FEF3C7'],
@@ -886,13 +923,13 @@ async function generateReport(projects) {
     s.addText(String(r[1]), { x: cx[0] + colW - numW, y: yy, w: numW, h: barH, fontSize: 12.5, bold: true, color: '1A1A1A', align: 'center', valign: 'middle', fontFace: FONT })
   })
   const totY = 3.5
-  s.addShape(pptx.shapes.RECTANGLE, { x: cx[0], y: totY, w: colW, h: 0.56, fill: { color: '13233B' } })
+  s.addShape(pptx.shapes.RECTANGLE, { x: cx[0], y: totY, w: colW, h: 0.56, fill: { color: INK } })
   s.addText(`${total} Projects`, { x: cx[0], y: totY + 0.03, w: colW, h: 0.32, fontSize: 19, bold: true, color: 'FFFFFF', align: 'center', valign: 'middle', fontFace: FONT })
-  s.addText(`Total Active Portfolio   |   ${currentMonth} ${currentYear}`, { x: cx[0], y: totY + 0.36, w: colW, h: 0.18, fontSize: 8, color: 'B9C6D8', align: 'center', valign: 'middle', fontFace: FONT })
+  s.addText(`Total Active Portfolio   |   ${currentMonth} ${currentYear}`, { x: cx[0], y: totY + 0.36, w: colW, h: 0.18, fontSize: 8, color: 'BFBDB6', align: 'center', valign: 'middle', fontFace: FONT })
   const lnkY = totY + 0.66
-  s.addShape(pptx.shapes.RECTANGLE, { x: cx[0], y: lnkY, w: colW, h: 0.28, fill: { color: 'EEF0FA' } })
+  s.addShape(pptx.shapes.RECTANGLE, { x: cx[0], y: lnkY, w: colW, h: 0.28, fill: { color: PANEL }, line: { color: LINE, width: 0.75 } })
   s.addText([{ text: '▸ Full Projects Roadmap & Tracker', options: { hyperlink: { url: 'https://utcebs.github.io/EBS-Dashboard/' } } }],
-    { x: cx[0], y: lnkY, w: colW, h: 0.28, fontSize: 9.5, bold: true, color: '2B4C7E', align: 'center', valign: 'middle', fontFace: FONT })
+    { x: cx[0], y: lnkY, w: colW, h: 0.28, fontSize: 9.5, bold: true, color: INK, align: 'center', valign: 'middle', fontFace: FONT })
 
   // The other five panels (AI-written content)
   panel(cx[1], topTitleY, topBoxY, `${currentMonth} Highlights`, content.highlights, { bulletCode: '2713', max: 7 })
@@ -900,6 +937,104 @@ async function generateReport(projects) {
   panel(cx[0], botTitleY, botBoxY, 'New This Month', content.newThisMonth, { max: 7 })
   panel(cx[1], botTitleY, botBoxY, `${nextMonth} ${nextYear} Focus`, content.focus, { max: 8 })
   panel(cx[2], botTitleY, botBoxY, 'Decisions Required', content.decisions, { max: 7 })
+
+  // ─── Chart slides (native, editable PowerPoint charts) ───
+  const safeChart = (sl, ...a) => { try { sl.addChart(...a) } catch (e) { console.error('MBR chart skipped:', e) } }
+  const chartHeader = (sl, title, subtitle) => {
+    sl.background = { color: 'FFFFFF' }
+    sl.addText(title, { x: 0.5, y: 0.22, w: 9, h: 0.6, fontSize: 30, bold: true, color: INK, fontFace: FONT })
+    sl.addText(subtitle, { x: 0.52, y: 0.86, w: 10.6, h: 0.34, fontSize: 13, color: MUTED, fontFace: FONT })
+    if (ujLogo) { try { sl.addImage({ data: ujLogo, x: 12.11, y: 0.2, w: 0.72, h: 0.82 }) } catch { /* ignore */ } }
+    else sl.addText('EBS', { x: 11.6, y: 0.3, w: 1.4, h: 0.6, fontSize: 26, bold: true, color: INK, align: 'right', valign: 'middle', fontFace: FONT })
+    sl.addShape(pptx.shapes.RECTANGLE, { x: 0.5, y: 1.42, w: 12.33, h: 0.028, fill: { color: INK } })
+  }
+
+  // Derived chart data
+  const statusLabels = statusRows.map(r => r[0]), statusValues = statusRows.map(r => r[1]), statusColors = statusRows.map(r => r[2])
+  const PHASE_ORDER = ['Initiation', 'Planning', 'Execution', 'UAT', 'Go-Live', 'Closed']
+  const byPhase = {}
+  proj.forEach(p => { const ph = p.phase || 'Other'; byPhase[ph] = (byPhase[ph] || 0) + 1 })
+  const phaseLabels = Object.keys(byPhase).sort((a, b) => ((PHASE_ORDER.indexOf(a) + 1) || 99) - ((PHASE_ORDER.indexOf(b) + 1) || 99))
+  const phaseValues = phaseLabels.map(l => byPhase[l])
+  // Milestone delivery stats
+  const ms = data.milestones || []
+  const parseD = (sd) => (sd ? new Date(sd) : null)
+  const today0 = new Date(); today0.setHours(0, 0, 0, 0)
+  const delivered = ms.filter(m => m.actual_date && m.target_date)
+  const onTime = delivered.filter(m => parseD(m.actual_date) <= parseD(m.target_date)).length
+  const overdue = ms.filter(m => { const t = parseD(m.target_date); return t && !m.actual_date && t < today0 }).length
+  const onTimeRate = (delivered.length + overdue) ? Math.round(onTime / (delivered.length + overdue) * 100) : null
+  // Monthly lifecycle (last 8 months): started / in-progress / completed
+  const monthOf = (d) => (d ? String(d).slice(0, 7) : null)
+  const withStart = proj.filter(p => p.start_date)
+  let months = []
+  if (withStart.length) {
+    const earliest = monthOf(withStart.map(p => p.start_date).sort()[0])
+    const [fy, fmo] = earliest.split('-').map(Number)
+    const cur = new Date(fy, fmo - 1, 1), end = new Date(now.getFullYear(), now.getMonth(), 1)
+    while (cur <= end) {
+      const k = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`
+      let st = 0, ip = 0, cp = 0
+      proj.forEach(p => {
+        const sm = monthOf(p.start_date), em = monthOf(p.end_date)
+        if (!sm) return
+        if (sm === k) st++
+        if (em && em === k) cp++
+        if (sm < k && (!em || k < em)) ip++
+      })
+      months.push({ k, st, ip, cp })
+      cur.setMonth(cur.getMonth() + 1)
+    }
+    months = months.slice(-8)
+  }
+  const trendLabels = months.map(m => { const [y, mo] = m.k.split('-').map(Number); return `${monthNames[mo - 1].slice(0, 3)} '${String(y).slice(2)}` })
+
+  // ── Slide 4: Portfolio Overview (donut + phase bar + KPI strip) ──
+  const s4 = pptx.addSlide()
+  chartHeader(s4, 'Portfolio Overview', `EBS Project Portfolio   |   ${currentMonth} ${currentYear}   |   Status & Phase`)
+  ;[['Total Projects', String(total)], ['On Track', String(cnt('On Track'))], ['Completed', String(cnt('Completed'))], ['At Risk / Delayed', String(cnt('At Risk') + cnt('Delayed'))]]
+    .forEach((kk, i) => {
+      const x = 0.5 + i * 3.13
+      s4.addShape(pptx.shapes.RECTANGLE, { x, y: 1.68, w: 2.98, h: 0.92, fill: { color: PANEL }, line: { color: LINE, width: 0.75 } })
+      s4.addShape(pptx.shapes.RECTANGLE, { x, y: 1.68, w: 0.05, h: 0.92, fill: { color: INK } })
+      s4.addText(kk[1], { x: x + 0.1, y: 1.76, w: 2.88, h: 0.46, fontSize: 24, bold: true, color: INK, align: 'center', fontFace: FONT })
+      s4.addText(kk[0], { x: x + 0.1, y: 2.24, w: 2.88, h: 0.3, fontSize: 10, color: MUTED, align: 'center', fontFace: FONT })
+    })
+  s4.addText('Status Breakdown', { x: 0.5, y: 2.95, w: 6, h: 0.35, fontSize: 14, bold: true, color: INK, fontFace: FONT })
+  safeChart(s4, pptx.charts.DOUGHNUT, [{ name: 'Status', labels: statusLabels, values: statusValues }], {
+    x: 0.4, y: 3.35, w: 6.2, h: 3.6, holeSize: 58, chartColors: statusColors, showLegend: true, legendPos: 'r', legendFontSize: 11, legendColor: '333333',
+    showValue: true, dataLabelColor: 'FFFFFF', dataLabelFontSize: 11, dataLabelFontBold: true, showTitle: false, fontFace: FONT,
+  })
+  s4.addText('Projects by Phase', { x: 7, y: 2.95, w: 6, h: 0.35, fontSize: 14, bold: true, color: INK, fontFace: FONT })
+  safeChart(s4, pptx.charts.BAR, [{ name: 'Projects', labels: phaseLabels, values: phaseValues }], {
+    x: 6.9, y: 3.35, w: 6.1, h: 3.6, barDir: 'col', chartColors: ['2A2A2A'], showValue: true, dataLabelColor: '333333', dataLabelFontSize: 11, dataLabelFontBold: true,
+    showLegend: false, showTitle: false, catAxisLabelColor: '444444', catAxisLabelFontSize: 10, valAxisHidden: true, valGridLine: { style: 'none' }, barGapWidthPct: 45, fontFace: FONT,
+  })
+
+  // ── Slide 5: Delivery Performance (activity line + milestone callouts) ──
+  const s5 = pptx.addSlide()
+  chartHeader(s5, 'Delivery Performance', `EBS Project Portfolio   |   ${currentMonth} ${currentYear}   |   Activity & Milestones`)
+  s5.addText('Project Activity  ·  started / in progress / completed', { x: 0.5, y: 1.68, w: 9, h: 0.35, fontSize: 14, bold: true, color: INK, fontFace: FONT })
+  if (months.length) {
+    safeChart(s5, pptx.charts.LINE, [
+      { name: 'Started', labels: trendLabels, values: months.map(m => m.st) },
+      { name: 'In Progress', labels: trendLabels, values: months.map(m => m.ip) },
+      { name: 'Completed', labels: trendLabels, values: months.map(m => m.cp) },
+    ], {
+      x: 0.4, y: 2.1, w: 8.5, h: 4.9, chartColors: ['3B82F6', '9AA0A6', '10B981'], showLegend: true, legendPos: 'b', legendFontSize: 11, legendColor: '333333',
+      lineSmooth: true, lineSize: 2.5, showTitle: false, catAxisLabelColor: '444444', catAxisLabelFontSize: 10, valAxisLabelColor: '888888', valAxisMinVal: 0, fontFace: FONT,
+    })
+  } else {
+    s5.addText('Not enough dated projects to chart activity yet.', { x: 0.5, y: 3.4, w: 8, h: 0.5, fontSize: 12, color: MUTED, fontFace: FONT })
+  }
+  const callX = 9.15, callW = 3.68
+  ;[['On-Time Delivery', onTimeRate == null ? '—' : onTimeRate + '%', '10B981'], ['Overdue Milestones', String(overdue), 'EF4444'], ['Delivered', String(delivered.length), '2563EB']]
+    .forEach((c, i) => {
+      const y = 2.1 + i * 1.66
+      s5.addShape(pptx.shapes.RECTANGLE, { x: callX, y, w: callW, h: 1.45, fill: { color: PANEL }, line: { color: LINE, width: 0.75 } })
+      s5.addText(c[1], { x: callX, y: y + 0.16, w: callW, h: 0.72, fontSize: 34, bold: true, color: c[2], align: 'center', fontFace: FONT })
+      s5.addText(c[0], { x: callX, y: y + 0.96, w: callW, h: 0.35, fontSize: 12, color: MUTED, align: 'center', fontFace: FONT })
+    })
 
   await pptx.writeFile({ fileName: `EBS_MBR_${currentMonth}_${currentYear}.pptx` })
 }
@@ -1281,6 +1416,8 @@ function Dashboard() {
   const onTimeRate = dueCount ? Math.round(onTimeMs.length / dueCount * 100) : null
   const blockedProjects = projects.filter(p => p.dependencies && String(p.dependencies).trim().length > 3)
   const decisionProjects = projects.filter(p => p.actions_needed && String(p.actions_needed).trim().length > 8)
+  const STATUS_HEX = { 'On Track': '#10b981', 'At Risk': '#f59e0b', 'Delayed': '#ef4444', 'On Hold': '#8b5cf6' }
+  const openProgress = projects.filter(p => p.status !== 'Completed').sort((a, b) => numPct(b.percent_complete) - numPct(a.percent_complete))
   const secondaryStats = [
     { key: 'ontime', label: 'On-Time Delivery', value: onTimeRate == null ? '—' : onTimeRate + '%', icon: CheckCircle2 },
     { key: 'overdue', label: 'Overdue', value: overdueMs.length, icon: Clock },
@@ -1411,14 +1548,15 @@ function Dashboard() {
 
     {/* Slide switcher — dots + toggle, keyboard ←/→ */}
     <div className="dash-slide-nav">
-      <div className="dash-slide-dots">
-        <button className={`dash-dot ${slide === 0 ? 'is-active' : ''}`} onClick={() => setSlide(0)} aria-label="Overview" title="Overview" />
-        <button className={`dash-dot ${slide === 1 ? 'is-active' : ''}`} onClick={() => setSlide(1)} aria-label="Insights" title="Insights" />
+      <div className="dash-seg" role="tablist">
+        <button role="tab" aria-selected={slide === 0} className={slide === 0 ? 'is-active' : ''} onClick={() => setSlide(0)}>
+          <LayoutDashboard size={14} /> Overview
+        </button>
+        <button role="tab" aria-selected={slide === 1} className={slide === 1 ? 'is-active' : ''} onClick={() => setSlide(1)}>
+          <BarChart3 size={14} /> Insights
+        </button>
       </div>
-      <button className="dash-slide-toggle" onClick={() => setSlide(slide === 0 ? 1 : 0)}>
-        {slide === 0 ? <>Insights <ChevronRight size={14} /></> : <><ChevronLeft size={14} /> Overview</>}
-      </button>
-      <span className="dash-slide-hint">Use ← / → keys</span>
+      <span className="dash-slide-hint">← / → to switch</span>
     </div>
 
     <div className="dash-stage">
@@ -1500,30 +1638,6 @@ function Dashboard() {
 
         </div>{/* end dash-screen (Overview) */}
 
-    {/* Editorial closer — original "Starting This Month" (unchanged) */}
-    <section className="dash-month-section">
-      <div className="dash-month-eyebrow">Starting This Month</div>
-      <h2 className="dash-month-title">{monthName}<span className="yr">'{String(now.getFullYear()).slice(2)}</span></h2>
-      <p className="dash-month-sub">{newThisMonth.length} {newThisMonth.length === 1 ? 'project kicks off' : 'projects kick off'} this month.</p>
-      {newThisMonth.length === 0 ? (
-        <div className="dash-month-empty">A quiet stretch — no projects starting this month.</div>
-      ) : (
-        <div className="dash-month-list">
-          {newThisMonth.map((p, i) => (
-            <div key={p.id} className="dash-month-row" onClick={() => navigate(`/projects/${p.id}`)}>
-              <div className="dash-month-num">{String(i + 1).padStart(2, '0')}</div>
-              <div>
-                <div className="dash-month-name">{p.project_name}</div>
-                <div className="dash-month-meta">{p.business_owner || 'Unassigned'} · {p.phase || '—'}</div>
-              </div>
-              <StatusBadge status={p.status} />
-              <div className="dash-month-date">#{p.project_number || '—'}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-
         </div>
       ) : (
         /* ══ Insights ══ */
@@ -1603,19 +1717,19 @@ function Dashboard() {
               )}
             </div>
             <div className="dash-panel bg-white rounded-2xl p-5 border border-surface-200 shadow-sm lg:col-span-2">
-              <h3 className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2"><FileWarning size={15} className="text-brand-400" /> Decisions Required</h3>
-              {decisionProjects.length === 0 ? <p className="text-sm text-surface-400 py-4">No pending decisions.</p> : (
-                <div className="space-y-2 dash-list-scroll">
-                  {decisionProjects.map(p => (
-                    <div key={p.id} onClick={() => navigate(`/projects/${p.id}`)} title={p.actions_needed}
-                      className="dash-row flex items-start justify-between gap-3 p-2.5 rounded-xl bg-surface-50 hover:bg-brand-50/50 cursor-pointer transition-all group">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-surface-800 truncate">{p.project_name}</p>
-                        <p className="text-xs text-surface-500 truncate">{p.actions_needed}</p>
-                      </div>
-                      <ChevronRight size={14} className="text-surface-300 group-hover:text-brand-400 shrink-0 mt-0.5" />
-                    </div>
-                  ))}
+              <h3 className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2"><BarChart3 size={15} className="text-brand-400" /> Open Projects · Progress</h3>
+              {openProgress.length === 0 ? <p className="text-sm text-surface-400 py-4">No open projects.</p> : (
+                <div className="dash-barlist dash-list-scroll">
+                  {openProgress.map(p => {
+                    const pv = Math.max(0, Math.min(100, numPct(p.percent_complete)))
+                    return (
+                      <button key={p.id} className="dash-bar-row" onClick={() => navigate(`/projects/${p.id}`)} title={`${p.project_name} — ${pv}% · ${p.status}`}>
+                        <span className="dash-bar-label">{p.project_name}</span>
+                        <span className="dash-bar-track"><span className="dash-bar-fill" style={{ width: `${Math.max(4, pv)}%`, background: STATUS_HEX[p.status] || undefined }} /></span>
+                        <span className="dash-bar-value">{pv}%</span>
+                      </button>
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -1625,6 +1739,30 @@ function Dashboard() {
         </div>
       )}
     </div>{/* end dash-stage */}
+
+    {/* Editorial closer — standalone, persists below whichever slide is active */}
+    <section className="dash-month-section">
+      <div className="dash-month-eyebrow">Starting This Month</div>
+      <h2 className="dash-month-title">{monthName}<span className="yr">'{String(now.getFullYear()).slice(2)}</span></h2>
+      <p className="dash-month-sub">{newThisMonth.length} {newThisMonth.length === 1 ? 'project kicks off' : 'projects kick off'} this month.</p>
+      {newThisMonth.length === 0 ? (
+        <div className="dash-month-empty">A quiet stretch — no projects starting this month.</div>
+      ) : (
+        <div className="dash-month-list">
+          {newThisMonth.map((p, i) => (
+            <div key={p.id} className="dash-month-row" onClick={() => navigate(`/projects/${p.id}`)}>
+              <div className="dash-month-num">{String(i + 1).padStart(2, '0')}</div>
+              <div>
+                <div className="dash-month-name">{p.project_name}</div>
+                <div className="dash-month-meta">{p.business_owner || 'Unassigned'} · {p.phase || '—'}</div>
+              </div>
+              <StatusBadge status={p.status} />
+              <div className="dash-month-date">#{p.project_number || '—'}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
 
     {/* Drill-down modal */}
     <DrillDownModal open={!!drillDown} onClose={() => setDrillDown(null)}

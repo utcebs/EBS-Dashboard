@@ -3187,22 +3187,32 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 @keyframes dashSlideIn { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .dash-slide-anim { animation: none; } }
 .dash-slide-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-.dash-slide-dots { display: flex; align-items: center; gap: 6px; }
-.dash-dot { width: 8px; height: 8px; border-radius: 50%; border: none; padding: 0; cursor: pointer; background: rgba(58,47,29,0.2); transition: all 0.25s; }
-.dash-dot.is-active { width: 22px; border-radius: 4px; background: linear-gradient(160deg, #e6cf94, #caa15a); }
-.app-dark .dash-dot { background: rgba(245,230,194,0.22); }
-.app-dark .dash-dot.is-active { background: linear-gradient(160deg, #e6cf94, #caa15a); }
-.dash-slide-toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 9px; cursor: pointer; color: #7a5a26; border: 1px solid rgba(154,115,53,0.25); background: rgba(154,115,53,0.05); }
-.dash-slide-toggle:hover { background: rgba(154,115,53,0.1); }
-.app-dark .dash-slide-toggle { color: #e6cf94; border-color: rgba(212,184,123,0.25); background: rgba(212,184,123,0.06); }
-.app-dark .dash-slide-toggle:hover { background: rgba(212,184,123,0.12); }
+/* Segmented Overview / Insights switcher (tap on mobile, ←/→ on desktop). */
+.dash-seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 12px; background: rgba(58,47,29,0.06); border: 1px solid rgba(154,115,53,0.16); }
+.app-dark .dash-seg { background: rgba(255,255,255,0.04); border-color: rgba(212,184,123,0.16); }
+.dash-seg button { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; padding: 6px 14px; border-radius: 9px; border: none; background: transparent; color: rgba(58,47,29,0.55); cursor: pointer; transition: color 0.2s, background 0.2s; white-space: nowrap; }
+.app-dark .dash-seg button { color: rgba(245,230,194,0.5); }
+.dash-seg button:hover { color: rgba(58,47,29,0.8); }
+.app-dark .dash-seg button:hover { color: rgba(245,230,194,0.8); }
+.dash-seg button.is-active { background: linear-gradient(160deg, #e6cf94, #caa15a); color: #2a2113; box-shadow: 0 2px 8px -3px rgba(202,161,90,0.55); }
+.app-dark .dash-seg button.is-active { color: #2a2113; }
 .dash-slide-hint { font-size: 11px; color: rgba(58,47,29,0.4); }
 .app-dark .dash-slide-hint { color: rgba(245,230,194,0.35); }
+/* Mobile: no arrow keys, so make it a full-width tab bar with big tap targets. */
+@media (max-width: 640px) {
+  .dash-slide-hint { display: none; }
+  .dash-slide-nav { margin-bottom: 12px; }
+  .dash-seg { display: flex; width: 100%; padding: 4px; border-radius: 14px; }
+  .dash-seg button { flex: 1; justify-content: center; padding: 10px 8px; font-size: 13.5px; border-radius: 10px; }
+}
 
 /* Equal-height list/bar cards: header fixed, body fills + scrolls so the row
    looks finished (no ragged bottoms). */
 .dash-panel { display: flex; flex-direction: column; }
 .dash-panel .dash-list-scroll { flex: 1 1 auto; max-height: none; min-height: 0; }
+/* Below lg the cards lose their fixed height (they stack), so cap the list so
+   it scrolls internally instead of expanding to show every row. */
+@media (max-width: 1023px) { .dash-panel .dash-list-scroll { max-height: 260px; } }
 
 /* Horizontal bar lists (Top Owners / Priority Mix) */
 .dash-barlist { display: flex; flex-direction: column; gap: 7px; }

@@ -149,6 +149,7 @@ async function runProviders(system: string, prompt: string, tier: string): Promi
 // would let anyone inject arbitrary briefing content).
 const SB_URL = Deno.env.get("SUPABASE_URL") ?? ""
 const SB_SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+const SB_ANON = Deno.env.get("SUPABASE_ANON_KEY") ?? ""
 function sbRest(path: string, init: RequestInit = {}) {
   return fetch(`${SB_URL}/rest/v1/${path}`, {
     ...init,
@@ -208,7 +209,7 @@ async function generateBriefing(today: string) {
   // Persist with the service role (bypasses RLS). Non-fatal if it fails.
   let generated_at: string | undefined, id: string | undefined
   try {
-    const ins = await sbRest("ai_briefings", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ content: text, provider: r.provider }) })
+    const ins = await sbRest("ai_briefings", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ content: text, provider: r.provider, briefing_date: today }) })
     if (ins.ok) { const rows = await ins.json(); generated_at = rows?.[0]?.generated_at; id = rows?.[0]?.id }
   } catch { /* still return the briefing even if caching failed */ }
   return { text, provider: r.provider, generated_at, id, saved: !!id }
@@ -226,15 +227,29 @@ Deno.serve(async (req) => {
     return json({ error: "invalid JSON body" }, 400)
   }
 
-  const { system = "", prompt = "", tier = "light", warmup = false, action = "", today = "" } = payload as {
-    system?: string; prompt?: string; tier?: string; warmup?: boolean; action?: string; today?: string
+  const { system = "", prompt = "", tier = "light", warmup = false, action = "", today = "", force = false } = payload as {
+    system?: string; prompt?: string; tier?: string; warmup?: boolean; action?: string; today?: string; force?: boolean
   }
   if (warmup) return json({ ok: true })
 
   try {
-    // Server-side briefing: fetch data + generate + save (guest-triggerable, cached for all).
+    // Daily Briefing. AUTO (default): generate today's only if it doesn't exist
+    // yet — so any number of first-of-day visitors trigger a single generation
+    // and everyone else just receives it (stampede-safe, one AI call per day).
+    // FORCE (manual regen): admins only, always regenerates.
     if (action === "briefing") {
       const t = today || new Date().toISOString().slice(0, 10)
+      if (force) {
+        const tok = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "")
+        const me = tok ? await fetch(`${SB_URL}/auth/v1/user`, { headers: { apikey: SB_ANON, Authorization: `Bearer ${tok}` } }) : null
+        if (!me || !me.ok) return json({ error: "unauthorized" }, 401)
+        const uid = (await me.json())?.id
+        const prof = await sbRest(`profiles?id=eq.${uid}&select=role`).then((r) => r.json()).catch(() => [])
+        if (prof?.[0]?.role !== "admin") return json({ error: "admin only" }, 403)
+        return json(await generateBriefing(t))
+      }
+      const existing = await sbRest(`ai_briefings?select=content,provider,generated_at&briefing_date=eq.${t}&order=generated_at.desc&limit=1`).then((r) => r.json()).catch(() => [])
+      if (existing?.[0]) return json({ text: existing[0].content, provider: existing[0].provider, generated_at: existing[0].generated_at, cached: true })
       return json(await generateBriefing(t))
     }
     // Generic prompt path (chatbot, MBR content).

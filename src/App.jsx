@@ -1200,6 +1200,7 @@ function Layout() {
 // ─── DASHBOARD (with drill-down) ────────────────────────────
 function Dashboard() {
   const { projects, projectsLoading, projectsError, refreshProjects } = useProjects()
+  const { isAdmin } = useAuth()
   const [drillDown, setDrillDown] = useState(null) // { title, projects }
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [slide, setSlide] = useState(0) // 0 = Overview, 1 = Insights
@@ -1394,7 +1395,7 @@ function Dashboard() {
       </div>
       {/* Project-level dashboard selector */}
       <div className="flex flex-wrap items-center gap-2">
-        <AiBriefing />
+        <AiBriefing isAdmin={isAdmin} />
         <MbrButton projects={projects} />
         <select value={selectedProjectId} onChange={e => { if (e.target.value) navigate(`/projects/${e.target.value}`) }}
           className={`${selectCls} w-full sm:w-auto sm:min-w-[220px] text-sm`}>

@@ -787,7 +787,7 @@ async function generateReport(projects) {
       ? allRisks.map(r => ({ lead: pNameById[r.project_id] || 'Risk', detail: r.description || r.impact || '' }))
       : proj.filter(p => ['Delayed', 'At Risk', 'On Hold'].includes(p.status)).map(p => ({ lead: p.project_name, detail: p.key_risks || p.status }))
     const mmKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-    const nw = proj.filter(p => p.start_date === mmKey).map(p => ({ lead: p.project_name, detail: p.business_owner || p.dept_module || '' }))
+    const nw = proj.filter(p => String(p.start_date || '').slice(0, 7) === mmKey).map(p => ({ lead: p.project_name, detail: p.business_owner || p.dept_module || '' }))
     const fo = proj.filter(p => ['Planning', 'Execution', 'UAT', 'Go-Live'].includes(p.phase) && p.status !== 'Completed')
       .map(p => ({ lead: p.project_name, detail: `${p.phase} · ${numPct(p.percent_complete)}%` }))
     const de = proj.filter(p => p.actions_needed && p.actions_needed.trim().length > 8)
@@ -960,10 +960,13 @@ async function generateReport(projects) {
   const ms = data.milestones || []
   const parseD = (sd) => (sd ? new Date(sd) : null)
   const today0 = new Date(); today0.setHours(0, 0, 0, 0)
-  const delivered = ms.filter(m => m.actual_date && m.target_date)
-  const onTime = delivered.filter(m => parseD(m.actual_date) <= parseD(m.target_date)).length
-  const overdue = ms.filter(m => { const t = parseD(m.target_date); return t && !m.actual_date && t < today0 }).length
-  const onTimeRate = (delivered.length + overdue) ? Math.round(onTime / (delivered.length + overdue) * 100) : null
+  // Completion off development_status (reliable). actual_date is the Actual START
+  // date here (actual_end_date is empty), so it can't measure on-time delivery —
+  // report Completed % and Overdue (past deadline & not yet completed) instead.
+  const isDone = (m) => String(m.development_status || '').trim().toLowerCase() === 'completed'
+  const completed = ms.filter(isDone).length
+  const overdue = ms.filter(m => { const t = parseD(m.target_date); return t && !isDone(m) && t < today0 }).length
+  const completedRate = ms.length ? Math.round(completed / ms.length * 100) : null
   // Monthly lifecycle (last 8 months): started / in-progress / completed
   const monthOf = (d) => (d ? String(d).slice(0, 7) : null)
   const withStart = proj.filter(p => p.start_date)
@@ -1028,7 +1031,7 @@ async function generateReport(projects) {
     s5.addText('Not enough dated projects to chart activity yet.', { x: 0.5, y: 3.4, w: 8, h: 0.5, fontSize: 12, color: MUTED, fontFace: FONT })
   }
   const callX = 9.15, callW = 3.68
-  ;[['On-Time Delivery', onTimeRate == null ? '—' : onTimeRate + '%', '10B981'], ['Overdue Milestones', String(overdue), 'EF4444'], ['Delivered', String(delivered.length), '2563EB']]
+  ;[['Milestones Completed', completedRate == null ? '—' : completedRate + '%', '10B981'], ['Overdue Milestones', String(overdue), 'EF4444'], ['Completed', String(completed), '2563EB']]
     .forEach((c, i) => {
       const y = 2.1 + i * 1.66
       s5.addShape(pptx.shapes.RECTANGLE, { x: callX, y, w: callW, h: 1.45, fill: { color: PANEL }, line: { color: LINE, width: 0.75 } })
@@ -1360,7 +1363,13 @@ function Dashboard() {
   }, [])
 
   useEffect(() => {
-    supabasePublic.from('milestones').select('*').then(({ data }) => setMilestones(data || []))
+    let cancelled = false
+    supabasePublic.from('milestones').select('*').then(({ data, error }) => {
+      if (cancelled) return
+      if (error) console.error('Milestones load failed:', error)
+      setMilestones(data || [])
+    })
+    return () => { cancelled = true }
   }, [])
 
   if (projectsLoading) return <Spinner />
@@ -1400,26 +1409,29 @@ function Dashboard() {
   const today0 = new Date(); today0.setHours(0, 0, 0, 0)
   const soon = new Date(today0); soon.setDate(soon.getDate() + 60)
   const fmtDay = (s) => { const d = parseD(s); return d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '' }
+  // Completion is read off development_status (the reliable done-flag). We do NOT
+  // use actual_date for "delivered" — in this data actual_date is the Actual
+  // START date, not completion (and actual_end_date is empty), so an on-time-
+  // delivery % built on it would be meaningless. A milestone is overdue when it
+  // is past its target date and NOT yet completed.
+  const isDone = (m) => String(m.development_status || '').trim().toLowerCase() === 'completed'
   const upcomingMs = milestones
-    .filter(m => { const t = parseD(m.target_date); return t && !m.actual_date && t >= today0 && t <= soon })
+    .filter(m => { const t = parseD(m.target_date); return t && !isDone(m) && t >= today0 && t <= soon })
     .sort((a, b) => parseD(a.target_date) - parseD(b.target_date))
   const overdueMs = milestones
-    .filter(m => { const t = parseD(m.target_date); return t && !m.actual_date && t < today0 })
+    .filter(m => { const t = parseD(m.target_date); return t && !isDone(m) && t < today0 })
     .sort((a, b) => parseD(a.target_date) - parseD(b.target_date))
   const watchMs = [...overdueMs, ...upcomingMs] // overdue (oldest first) then upcoming (soonest first)
-  const completedMs = milestones.filter(m => m.actual_date && m.target_date)
-  const onTimeMs = completedMs.filter(m => parseD(m.actual_date) <= parseD(m.target_date))
-  // Everything that was DUE by now = delivered + still-overdue. On-time% is
-  // measured against that, so it reconciles with the overdue count (an overdue
-  // milestone is, by definition, not on time).
-  const dueCount = completedMs.length + overdueMs.length
-  const onTimeRate = dueCount ? Math.round(onTimeMs.length / dueCount * 100) : null
-  const blockedProjects = projects.filter(p => p.dependencies && String(p.dependencies).trim().length > 3)
-  const decisionProjects = projects.filter(p => p.actions_needed && String(p.actions_needed).trim().length > 8)
+  const doneMs = milestones.filter(isDone)
+  const completedRate = milestones.length ? Math.round(doneMs.length / milestones.length * 100) : null
+  const inProgressMs = Math.max(0, milestones.length - doneMs.length - overdueMs.length)
+  const notSentinel = (s) => { const t = String(s || '').trim().toLowerCase(); return t.length > 0 && !['none', 'n/a', 'na', 'tbd', 'nil', 'null', '-', '—'].includes(t) }
+  const blockedProjects = projects.filter(p => notSentinel(p.dependencies) && String(p.dependencies).trim().length > 3)
+  const decisionProjects = projects.filter(p => notSentinel(p.actions_needed) && String(p.actions_needed).trim().length > 8)
   const STATUS_HEX = { 'On Track': '#10b981', 'At Risk': '#f59e0b', 'Delayed': '#ef4444', 'On Hold': '#8b5cf6' }
   const openProgress = projects.filter(p => p.status !== 'Completed').sort((a, b) => numPct(b.percent_complete) - numPct(a.percent_complete))
   const secondaryStats = [
-    { key: 'ontime', label: 'On-Time Delivery', value: onTimeRate == null ? '—' : onTimeRate + '%', icon: CheckCircle2 },
+    { key: 'completed', label: 'Milestones Completed', value: completedRate == null ? '—' : completedRate + '%', icon: CheckCircle2 },
     { key: 'overdue', label: 'Overdue', value: overdueMs.length, icon: Clock },
     { key: 'blocked', label: 'Blocked', value: blockedProjects.length, icon: AlertTriangle },
     { key: 'decisions', label: 'Decisions Needed', value: decisionProjects.length, icon: FileWarning },
@@ -1460,7 +1472,7 @@ function Dashboard() {
   const monthName = now.toLocaleDateString('en-US', { month: 'long' })
   const yearMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const newThisMonth = projects
-    .filter(p => p.start_date === yearMonthKey)
+    .filter(p => String(p.start_date || '').slice(0, 7) === yearMonthKey)
     .sort((a, b) => (a.project_number || 0) - (b.project_number || 0))
 
   // Progress so far — every project's lifecycle bucketed per month.
@@ -1664,8 +1676,8 @@ function Dashboard() {
                   {watchMs.map((m, i) => {
                     const late = parseD(m.target_date) < today0
                     return (
-                    <div key={m.id || i} onClick={() => navigate(`/projects/${m.project_id}`)} title={`${m.deliverable || 'Milestone'} — ${projName[m.project_id] || ''}`}
-                      className="dash-row flex items-center justify-between gap-3 p-2.5 rounded-xl bg-surface-50 hover:bg-brand-50/50 cursor-pointer transition-all group">
+                    <div key={m.id || i} onClick={() => { if (m.project_id) navigate(`/projects/${m.project_id}`) }} title={`${m.deliverable || 'Milestone'} — ${projName[m.project_id] || ''}`}
+                      className={`dash-row flex items-center justify-between gap-3 p-2.5 rounded-xl bg-surface-50 transition-all group ${m.project_id ? 'hover:bg-brand-50/50 cursor-pointer' : ''}`}>
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-surface-800 truncate">{m.deliverable || 'Milestone'}</p>
                         <p className="text-xs text-surface-500 truncate">{projName[m.project_id] || 'Unknown project'}</p>
@@ -1680,18 +1692,18 @@ function Dashboard() {
               )}
             </div>
             <div className="dash-panel bg-white rounded-2xl p-5 border border-surface-200 shadow-sm">
-              <h3 className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2"><CheckCircle2 size={15} className="text-brand-400" /> On-Time Delivery</h3>
-              {completedMs.length === 0 ? <p className="text-sm text-surface-400 py-4">No delivered milestones yet.</p> : (
+              <h3 className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2"><CheckCircle2 size={15} className="text-brand-400" /> Milestone Completion</h3>
+              {milestones.length === 0 ? <p className="text-sm text-surface-400 py-4">No milestones tracked yet.</p> : (
                 <div className="flex-1 flex flex-col">
                   <div className="text-center pt-2">
-                    <div style={{ fontSize: 44, fontWeight: 800, color: '#caa15a', lineHeight: 1 }}>{onTimeRate == null ? '—' : onTimeRate + '%'}</div>
-                    <div className="text-xs text-surface-500 mt-1.5">of {dueCount} due milestones delivered on time</div>
+                    <div style={{ fontSize: 44, fontWeight: 800, color: '#caa15a', lineHeight: 1 }}>{completedRate == null ? '—' : completedRate + '%'}</div>
+                    <div className="text-xs text-surface-500 mt-1.5">{doneMs.length} of {milestones.length} milestones completed</div>
                   </div>
                   <div className="mt-4">
-                    <span className="dash-bar-track block" style={{ height: 10 }}><span className="dash-bar-fill" style={{ width: `${onTimeRate || 0}%`, background: 'linear-gradient(90deg,#10b981,#34d399)' }} /></span>
+                    <span className="dash-bar-track block" style={{ height: 10 }}><span className="dash-bar-fill" style={{ width: `${completedRate || 0}%`, background: 'linear-gradient(90deg,#10b981,#34d399)' }} /></span>
                     <div className="flex justify-between mt-2 text-xs">
-                      <span style={{ color: '#10b981' }}>On time · {onTimeMs.length}</span>
-                      <span style={{ color: '#f59e0b' }}>Late · {completedMs.length - onTimeMs.length}</span>
+                      <span style={{ color: '#10b981' }}>Completed · {doneMs.length}</span>
+                      <span style={{ color: '#f59e0b' }}>In progress · {inProgressMs}</span>
                       <span style={{ color: '#ef4444' }}>Overdue · {overdueMs.length}</span>
                     </div>
                   </div>

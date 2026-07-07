@@ -13,7 +13,7 @@ import {
   RefreshCw, Search, Menu, AlertCircle, ExternalLink, BarChart3,
   ListChecks, FileWarning, Info, ChevronDown, ChevronUp,
   Upload, Download, FileSpreadsheet, Presentation, Sparkles,
-  FileText, UserCog, User, Sun, Moon
+  FileText, UserCog, User, Sun, Moon, CalendarDays
 } from 'lucide-react'
 
 // Heavy deps lazy-loaded on first use. Pays the download cost once
@@ -1063,10 +1063,32 @@ function MbrButton({ projects }) {
 }
 
 // ─── Drill-Down List Modal ──────────────────────────────────
-function DrillDownModal({ open, onClose, title, projects, onProjectClick }) {
+function DrillDownModal({ open, onClose, title, projects, milestones, projName = {}, onProjectClick }) {
   if (!open) return null
+  const isMilestones = Array.isArray(milestones)
+  const today0 = new Date(); today0.setHours(0, 0, 0, 0)
   return <Modal open={open} onClose={onClose} title={title} wide>
     <div className="space-y-2">
+      {isMilestones ? (<>
+        {milestones.map((m, i) => {
+          const late = m.target_date && new Date(m.target_date) < today0
+          const clickable = !!m.project_id
+          return (
+            <div key={m.id || i} onClick={() => { if (clickable) { onClose(); onProjectClick(m.project_id) } }}
+              className={`flex items-center justify-between p-4 rounded-xl border border-surface-100 transition-all group ${clickable ? 'hover:border-brand-200 hover:bg-brand-50/30 cursor-pointer' : ''}`}>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-surface-800 truncate">{m.deliverable || 'Milestone'}</p>
+                <p className="text-xs text-surface-500 mt-0.5 truncate">{projName[m.project_id] || 'Unknown project'}{m.owner ? ` · ${m.owner}` : ''}</p>
+              </div>
+              <div className="flex items-center gap-3 ml-4">
+                {m.target_date && <span className="text-xs font-semibold whitespace-nowrap" style={{ color: late ? '#ef4444' : '#caa15a' }}>{late ? 'Overdue · ' : ''}{new Date(m.target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>}
+                {clickable && <ChevronRight size={16} className="text-surface-300 group-hover:text-brand-500 transition-colors" />}
+              </div>
+            </div>
+          )
+        })}
+        {milestones.length === 0 && <p className="text-sm text-surface-400 text-center py-8">Nothing matches this filter</p>}
+      </>) : (<>
       {projects.map(p => (
         <div key={p.id} onClick={() => { onClose(); onProjectClick(p.id) }}
           className="flex items-center justify-between p-4 rounded-xl border border-surface-100 hover:border-brand-200 hover:bg-brand-50/30 cursor-pointer transition-all group">
@@ -1086,8 +1108,59 @@ function DrillDownModal({ open, onClose, title, projects, onProjectClick }) {
         </div>
       ))}
       {projects.length === 0 && <p className="text-sm text-surface-400 text-center py-8">No projects match this filter</p>}
+      </>)}
     </div>
   </Modal>
+}
+
+// Custom "Jump to project" dropdown — a native <select> can't have its open
+// list styled (scrollbar/font/rows are OS-drawn), so this is a fully-controlled
+// searchable menu instead.
+function ProjectJump({ projects, onPick }) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const wrapRef = useRef(null)
+  const inputRef = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    const t = setTimeout(() => inputRef.current?.focus(), 20)
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); clearTimeout(t) }
+  }, [open])
+  const term = q.trim().toLowerCase()
+  const filtered = term
+    ? projects.filter(p => String(p.project_name || '').toLowerCase().includes(term) || String(p.project_number || '').toLowerCase().includes(term))
+    : projects
+  return (
+    <div className="proj-jump" ref={wrapRef}>
+      <button type="button" className="proj-jump-trigger" onClick={() => setOpen(o => !o)} aria-haspopup="listbox" aria-expanded={open}>
+        <span className="proj-jump-triggerlbl">Jump to project…</span>
+        <ChevronDown size={15} className={`proj-jump-caret ${open ? 'is-open' : ''}`} />
+      </button>
+      {open && (
+        <div className="proj-jump-panel" role="listbox">
+          <div className="proj-jump-search">
+            <Search size={14} />
+            <input ref={inputRef} value={q} onChange={e => setQ(e.target.value)} placeholder="Search projects…"
+              id="proj-jump-search" name="proj-jump-search" autoComplete="off" />
+          </div>
+          <div className="proj-jump-list">
+            {filtered.length === 0 && <div className="proj-jump-empty">No matching projects</div>}
+            {filtered.map(p => (
+              <button key={p.id} type="button" role="option" className="proj-jump-item"
+                onClick={() => { setOpen(false); setQ(''); onPick(p.id) }}>
+                <span className="proj-jump-num">#{p.project_number}</span>
+                <span className="proj-jump-name">{p.project_name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ─── Layout ─────────────────────────────────────────────────
@@ -1343,8 +1416,8 @@ function Dashboard() {
   const { projects, projectsLoading, projectsError, refreshProjects } = useProjects()
   const { isAdmin } = useAuth()
   const [drillDown, setDrillDown] = useState(null) // { title, projects }
-  const [selectedProjectId, setSelectedProjectId] = useState('')
   const [slide, setSlide] = useState(0) // 0 = Overview, 1 = Insights
+  const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1) })
   const [milestones, setMilestones] = useState([]) // powers the Insights (Delivery) slide
   const navigate = useNavigate()
 
@@ -1425,16 +1498,46 @@ function Dashboard() {
   const doneMs = milestones.filter(isDone)
   const completedRate = milestones.length ? Math.round(doneMs.length / milestones.length * 100) : null
   const inProgressMs = Math.max(0, milestones.length - doneMs.length - overdueMs.length)
+
+  // ── Milestone Calendar: group milestones by their target date (day key) ──
+  const dayKey = (d) => { const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` }
+  const msStatus = (m) => isDone(m) ? 'done' : (parseD(m.target_date) < today0 ? 'overdue' : 'upcoming')
+  const msByDay = {}
+  milestones.forEach(m => { const t = parseD(m.target_date); if (!t) return; const k = dayKey(t); (msByDay[k] || (msByDay[k] = [])).push(m) })
+  const calY = calMonth.getFullYear(), calM = calMonth.getMonth()
+  const calLabel = calMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const firstWeekday = new Date(calY, calM, 1).getDay() // 0=Sun
+  const daysInMonth = new Date(calY, calM + 1, 0).getDate()
+  const todayKey = dayKey(today0)
+  const calCells = []
+  for (let i = 0; i < firstWeekday; i++) calCells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) calCells.push(d)
+  const CAL_HEX = { overdue: '#ef4444', upcoming: '#caa15a', done: '#10b981' }
+  const monthMsCount = milestones.filter(m => { const t = parseD(m.target_date); return t && t.getFullYear() === calY && t.getMonth() === calM }).length
   const notSentinel = (s) => { const t = String(s || '').trim().toLowerCase(); return t.length > 0 && !['none', 'n/a', 'na', 'tbd', 'nil', 'null', '-', '—'].includes(t) }
   const blockedProjects = projects.filter(p => notSentinel(p.dependencies) && String(p.dependencies).trim().length > 3)
   const decisionProjects = projects.filter(p => notSentinel(p.actions_needed) && String(p.actions_needed).trim().length > 8)
   const STATUS_HEX = { 'On Track': '#10b981', 'At Risk': '#f59e0b', 'Delayed': '#ef4444', 'On Hold': '#8b5cf6' }
   const openProgress = projects.filter(p => p.status !== 'Completed').sort((a, b) => numPct(b.percent_complete) - numPct(a.percent_complete))
+  // Active workload per owner: how many open (non-completed) projects each owns.
+  const openByOwner = {}
+  openProgress.forEach(p => { const o = p.business_owner || 'Unassigned'; openByOwner[o] = (openByOwner[o] || 0) + 1 })
+  const ownerLoad = Object.entries(openByOwner).sort((a, b) => b[1] - a[1])
+  const maxOwnerLoad = ownerLoad.length ? ownerLoad[0][1] : 0
+  // Milestones due within the next 7 days (not yet completed).
+  const weekEnd = new Date(today0); weekEnd.setDate(weekEnd.getDate() + 7)
+  const dueThisWeekMs = milestones
+    .filter(m => { const t = parseD(m.target_date); return t && !isDone(m) && t >= today0 && t <= weekEnd })
+    .sort((a, b) => parseD(a.target_date) - parseD(b.target_date))
   const secondaryStats = [
-    { key: 'completed', label: 'Milestones Completed', value: completedRate == null ? '—' : completedRate + '%', icon: CheckCircle2 },
-    { key: 'overdue', label: 'Overdue', value: overdueMs.length, icon: Clock },
-    { key: 'blocked', label: 'Blocked', value: blockedProjects.length, icon: AlertTriangle },
-    { key: 'decisions', label: 'Decisions Needed', value: decisionProjects.length, icon: FileWarning },
+    { key: 'atrisk', label: 'At Risk / Delayed', value: atRiskList.length, icon: AlertTriangle,
+      onClick: () => setDrillDown({ title: `At Risk & Delayed (${atRiskList.length})`, projects: atRiskList }) },
+    { key: 'overdue', label: 'Overdue', value: overdueMs.length, icon: Clock,
+      onClick: () => setDrillDown({ title: `Overdue Milestones (${overdueMs.length})`, milestones: overdueMs }) },
+    { key: 'dueweek', label: 'Due This Week', value: dueThisWeekMs.length, icon: CalendarDays,
+      onClick: () => setDrillDown({ title: `Due This Week (${dueThisWeekMs.length})`, milestones: dueThisWeekMs }) },
+    { key: 'decisions', label: 'Decisions Needed', value: decisionProjects.length, icon: FileWarning,
+      onClick: () => setDrillDown({ title: `Decisions Needed (${decisionProjects.length})`, projects: decisionProjects }) },
   ]
 
   // Drill-down handlers
@@ -1550,11 +1653,7 @@ function Dashboard() {
       <div className="flex flex-wrap items-center gap-2">
         <AiBriefing isAdmin={isAdmin} />
         <MbrButton projects={projects} />
-        <select value={selectedProjectId} onChange={e => { if (e.target.value) navigate(`/projects/${e.target.value}`) }}
-          className={`${selectCls} w-full sm:w-auto sm:min-w-[220px] text-sm`}>
-          <option value="">Jump to project...</option>
-          {projects.map(p => <option key={p.id} value={p.id}>#{p.project_number} — {p.project_name}</option>)}
-        </select>
+        <ProjectJump projects={projects} onPick={(id) => navigate(`/projects/${id}`)} />
       </div>
     </div>
 
@@ -1657,56 +1756,72 @@ function Dashboard() {
         <div className="dash-screen">
           {/* Secondary KPI strip */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
-            {secondaryStats.map(({ key, label, value, icon: Icon }) => (
-              <div key={key} data-kpi={key} className="dash-kpi bg-white rounded-2xl p-4 border border-surface-200 shadow-sm">
+            {secondaryStats.map(({ key, label, value, icon: Icon, onClick }) => (
+              <button key={key} data-kpi={key} onClick={onClick} type="button"
+                aria-label={`${label}: ${value}. View details`}
+                className="dash-kpi dash-kpi-btn bg-white rounded-2xl p-4 border border-surface-200 shadow-sm text-left w-full cursor-pointer transition-all hover:border-brand-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
                 <div className="flex items-center gap-3">
                   <span className="dash-kpi-chip"><Icon size={20} strokeWidth={1.75} /></span>
                   <div className="min-w-0"><p className="dash-kpi-value">{value}</p><p className="dash-kpi-label">{label}</p></div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
 
           {/* Upcoming milestones + On-time delivery (mirrors the Overview charts row) */}
           <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-1 gap-5 shrink-0 lg:h-[316px]">
             <div className="dash-panel bg-white rounded-2xl p-5 border border-surface-200 shadow-sm lg:col-span-2">
-              <h3 className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2"><Clock size={15} className="text-brand-400" /> Milestones · Overdue &amp; Upcoming</h3>
-              {watchMs.length === 0 ? <p className="text-sm text-surface-400 py-4">No overdue or upcoming milestones.</p> : (
-                <div className="space-y-2 dash-list-scroll">
-                  {watchMs.map((m, i) => {
-                    const late = parseD(m.target_date) < today0
-                    return (
-                    <div key={m.id || i} onClick={() => { if (m.project_id) navigate(`/projects/${m.project_id}`) }} title={`${m.deliverable || 'Milestone'} — ${projName[m.project_id] || ''}`}
-                      className={`dash-row flex items-center justify-between gap-3 p-2.5 rounded-xl bg-surface-50 transition-all group ${m.project_id ? 'hover:bg-brand-50/50 cursor-pointer' : ''}`}>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-surface-800 truncate">{m.deliverable || 'Milestone'}</p>
-                        <p className="text-xs text-surface-500 truncate">{projName[m.project_id] || 'Unknown project'}</p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs font-semibold whitespace-nowrap" style={{ color: late ? '#ef4444' : '#caa15a' }}>{late ? 'Overdue · ' : ''}{fmtDay(m.target_date)}</span>
-                        <ChevronRight size={14} className="text-surface-300 group-hover:text-brand-400" />
-                      </div>
-                    </div>
-                  )})}
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-surface-700 flex items-center gap-2"><CalendarDays size={15} className="text-brand-400" /> Milestone Calendar</h3>
+                <div className="flex items-center gap-1.5">
+                  <button type="button" onClick={() => setCalMonth(new Date(calY, calM - 1, 1))} aria-label="Previous month" className="dash-cal-nav"><ChevronLeft size={15} /></button>
+                  <span className="text-xs font-semibold text-surface-600 w-28 text-center tabular-nums">{calLabel}</span>
+                  <button type="button" onClick={() => setCalMonth(new Date(calY, calM + 1, 1))} aria-label="Next month" className="dash-cal-nav"><ChevronRight size={15} /></button>
                 </div>
-              )}
+              </div>
+              <div className="dash-cal">
+                <div className="dash-cal-grid dash-cal-dow">
+                  {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <span key={i} className="dash-cal-dowlbl">{d}</span>)}
+                </div>
+                <div className="dash-cal-grid dash-cal-body">
+                  {calCells.map((d, i) => {
+                    if (d == null) return <span key={`e${i}`} className="dash-cal-cell dash-cal-empty" />
+                    const k = `${calY}-${String(calM + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+                    const items = msByDay[k] || []
+                    const statuses = new Set(items.map(msStatus))
+                    const dot = statuses.has('overdue') ? 'overdue' : statuses.has('upcoming') ? 'upcoming' : statuses.has('done') ? 'done' : null
+                    const isToday = k === todayKey
+                    const has = items.length > 0
+                    return (
+                      <button key={k} type="button" disabled={!has}
+                        onClick={() => has && setDrillDown({ title: `Milestones · ${calMonth.toLocaleDateString('en-US', { month: 'short' })} ${d} (${items.length})`, milestones: items })}
+                        title={has ? `${items.length} milestone${items.length > 1 ? 's' : ''} due` : ''}
+                        className={`dash-cal-cell ${isToday ? 'is-today' : ''} ${has ? 'has-ms' : ''}`}>
+                        <span className="dash-cal-num">{d}</span>
+                        {dot && <span className="dash-cal-dot" style={{ background: CAL_HEX[dot] }}>{items.length > 1 ? items.length : ''}</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="dash-cal-legend">
+                  <span><i style={{ background: CAL_HEX.overdue }} />Overdue</span>
+                  <span><i style={{ background: CAL_HEX.upcoming }} />Upcoming</span>
+                  <span><i style={{ background: CAL_HEX.done }} />Completed</span>
+                  <span className="ml-auto text-surface-400">{monthMsCount} this month</span>
+                </div>
+              </div>
             </div>
             <div className="dash-panel bg-white rounded-2xl p-5 border border-surface-200 shadow-sm">
-              <h3 className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2"><CheckCircle2 size={15} className="text-brand-400" /> Milestone Completion</h3>
-              {milestones.length === 0 ? <p className="text-sm text-surface-400 py-4">No milestones tracked yet.</p> : (
-                <div className="flex-1 flex flex-col">
-                  <div className="text-center pt-2">
-                    <div style={{ fontSize: 44, fontWeight: 800, color: '#caa15a', lineHeight: 1 }}>{completedRate == null ? '—' : completedRate + '%'}</div>
-                    <div className="text-xs text-surface-500 mt-1.5">{doneMs.length} of {milestones.length} milestones completed</div>
-                  </div>
-                  <div className="mt-4">
-                    <span className="dash-bar-track block" style={{ height: 10 }}><span className="dash-bar-fill" style={{ width: `${completedRate || 0}%`, background: 'linear-gradient(90deg,#10b981,#34d399)' }} /></span>
-                    <div className="flex justify-between mt-2 text-xs">
-                      <span style={{ color: '#10b981' }}>Completed · {doneMs.length}</span>
-                      <span style={{ color: '#f59e0b' }}>In progress · {inProgressMs}</span>
-                      <span style={{ color: '#ef4444' }}>Overdue · {overdueMs.length}</span>
-                    </div>
-                  </div>
+              <h3 className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2"><Users size={15} className="text-brand-400" /> Workload by Owner</h3>
+              {ownerLoad.length === 0 ? <p className="text-sm text-surface-400 py-4">No open projects.</p> : (
+                <div className="dash-barlist dash-list-scroll">
+                  {ownerLoad.map(([owner, n]) => (
+                    <button key={owner} className="dash-bar-row" onClick={() => drillOwner(owner)} title={`${owner} — ${n} open project${n > 1 ? 's' : ''}`}>
+                      <span className="dash-bar-label">{owner}</span>
+                      <span className="dash-bar-track"><span className="dash-bar-fill" style={{ width: `${Math.max(6, maxOwnerLoad ? (n / maxOwnerLoad) * 100 : 0)}%` }} /></span>
+                      <span className="dash-bar-value">{n}</span>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -1779,6 +1894,7 @@ function Dashboard() {
     {/* Drill-down modal */}
     <DrillDownModal open={!!drillDown} onClose={() => setDrillDown(null)}
       title={drillDown?.title || ''} projects={drillDown?.projects || []}
+      milestones={drillDown?.milestones} projName={projName}
       onProjectClick={(id) => navigate(`/projects/${id}`)} />
   </div>
 }

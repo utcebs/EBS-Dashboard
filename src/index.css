@@ -3110,7 +3110,7 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .dash-row:hover { transform: translateX(3px); }
 
 /* Status donut — centre total label */
-.dash-donut-wrap { position: relative; width: 130px; }
+.dash-donut-wrap { position: relative; width: 150px; }
 .dash-donut-center {
   position: absolute; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; pointer-events: none;
@@ -3125,6 +3125,11 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   color: rgba(58,47,29,0.5); margin-top: 2px;
 }
 .app-dark .dash-donut-label { color: rgba(245,230,194,0.55); }
+/* Hovered-slice name shown in the donut center (not uppercase, fits the hole) */
+.dash-donut-name { text-transform: none; letter-spacing: 0.01em; font-weight: 600;
+  font-size: 0.66rem; max-width: 78px; text-align: center; line-height: 1.15;
+  white-space: normal; overflow: hidden; }
+.dash-donut-total, .dash-donut-label { transition: color .15s ease; }
 
 /* Donut side legend rows (clickable → drill-down) */
 .dash-legend-row {
@@ -3133,8 +3138,8 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   background: transparent; border: none; cursor: pointer;
   transition: background-color .2s ease;
 }
-.dash-legend-row:hover { background: rgba(154,115,53,0.08); }
-.app-dark .dash-legend-row:hover { background: rgba(212,184,123,0.10); }
+.dash-legend-row:hover, .dash-legend-row.is-active { background: rgba(154,115,53,0.08); }
+.app-dark .dash-legend-row:hover, .app-dark .dash-legend-row.is-active { background: rgba(212,184,123,0.10); }
 .dash-legend-dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
 .dash-legend-name {
   flex: 1; min-width: 0; font-size: 0.78rem; color: #4a3d28;
@@ -3248,6 +3253,8 @@ button.dash-cal-cell:disabled { cursor: default; }
 .dash-cal-nav { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
   border-radius: 8px; border: 1px solid rgba(58,47,29,0.14); color: #7a6a4a; background: #fff; transition: all .15s; }
 .dash-cal-nav:hover { background: rgba(202,161,90,0.14); border-color: rgba(202,161,90,0.45); }
+.dash-cal-nav:disabled { opacity: 0.35; cursor: default; background: transparent; border-color: rgba(58,47,29,0.12); }
+.app-dark .dash-cal-nav:disabled { border-color: rgba(255,255,255,0.12); }
 .dash-cal-legend { display: flex; align-items: center; gap: 12px; margin-top: 9px; font-size: 10.5px; color: #8a7c60; }
 .dash-cal-legend > span { display: inline-flex; align-items: center; gap: 4px; }
 .dash-cal-legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
@@ -3259,6 +3266,18 @@ button.dash-cal-cell:disabled { cursor: default; }
 .app-dark .dash-cal-nav { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.14); color: #cbbb95; }
 .app-dark .dash-cal-nav:hover { background: rgba(202,161,90,0.18); border-color: rgba(202,161,90,0.4); }
 .app-dark .dash-cal-legend { color: rgba(245,230,194,0.55); }
+
+/* Small two-way filter toggle inside a panel header (All / Active) */
+.dash-mini-seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 9px; background: rgba(58,47,29,0.06); }
+.dash-mini-seg > button { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 7px;
+  border: none; background: transparent; color: #8a7c60; cursor: pointer; transition: all .15s; white-space: nowrap; }
+.dash-mini-seg > button:hover { color: #6b5f4a; }
+.dash-mini-seg > button.is-active { background: #fff; color: #7a5a26; box-shadow: 0 1px 3px rgba(20,16,10,0.12); }
+.app-dark .dash-mini-seg { background: rgba(255,255,255,0.06); }
+.app-dark .dash-mini-seg > button { color: rgba(245,230,194,0.6); }
+.app-dark .dash-mini-seg > button:hover { color: rgba(245,230,194,0.85); }
+.app-dark .dash-mini-seg > button.is-active { background: rgba(202,161,90,0.22); color: #f0e8d6; box-shadow: none; }
+
 
 /* ── "Jump to project" custom dropdown ─────────────────────────── */
 .proj-jump { position: relative; width: 100%; }

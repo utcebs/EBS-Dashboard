@@ -1418,6 +1418,7 @@ function Dashboard() {
   const [drillDown, setDrillDown] = useState(null) // { title, projects }
   const [slide, setSlide] = useState(0) // 0 = Overview, 1 = Insights
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1) })
+  const [projFilter, setProjFilter] = useState('all') // Completion-by-project filter: all | active | done
   const [milestones, setMilestones] = useState([]) // powers the Insights (Delivery) slide
   const navigate = useNavigate()
 
@@ -1505,6 +1506,7 @@ function Dashboard() {
   const msByDay = {}
   milestones.forEach(m => { const t = parseD(m.target_date); if (!t) return; const k = dayKey(t); (msByDay[k] || (msByDay[k] = [])).push(m) })
   const calY = calMonth.getFullYear(), calM = calMonth.getMonth()
+  const calAtMin = calY < 2025 || (calY === 2025 && calM === 0) // floor: Jan 2025
   const calLabel = calMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
   const firstWeekday = new Date(calY, calM, 1).getDay() // 0=Sun
   const daysInMonth = new Date(calY, calM + 1, 0).getDate()
@@ -1524,6 +1526,16 @@ function Dashboard() {
   openProgress.forEach(p => { const o = p.business_owner || 'Unassigned'; openByOwner[o] = (openByOwner[o] || 0) + 1 })
   const ownerLoad = Object.entries(openByOwner).sort((a, b) => b[1] - a[1])
   const maxOwnerLoad = ownerLoad.length ? ownerLoad[0][1] : 0
+  // Milestone completion per project (only projects that actually have
+  // milestones). Fully-complete (100%) projects sink to the bottom; the rest
+  // rank by highest completion first.
+  const projMsStats = projects
+    .map(p => { const ms = milestones.filter(m => m.project_id === p.id); const done = ms.filter(isDone).length; return { id: p.id, name: p.project_name, done, total: ms.length, pct: ms.length ? Math.round(done / ms.length * 100) : 0 } })
+    .filter(s => s.total > 0)
+    .sort((a, b) => { const aDone = a.pct >= 100, bDone = b.pct >= 100; if (aDone !== bDone) return aDone ? 1 : -1; return b.pct - a.pct })
+  const projMsShown = projFilter === 'active' ? projMsStats.filter(s => s.pct < 100)
+    : projFilter === 'done' ? projMsStats.filter(s => s.pct >= 100)
+    : projMsStats
   // Milestones due within the next 7 days (not yet completed).
   const weekEnd = new Date(today0); weekEnd.setDate(weekEnd.getDate() + 7)
   const dueThisWeekMs = milestones
@@ -1768,13 +1780,13 @@ function Dashboard() {
             ))}
           </div>
 
-          {/* Upcoming milestones + On-time delivery (mirrors the Overview charts row) */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-1 gap-5 shrink-0 lg:h-[316px]">
-            <div className="dash-panel bg-white rounded-2xl p-5 border border-surface-200 shadow-sm lg:col-span-2">
+          {/* Calendar + Workload + Completion by project */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr_1fr] lg:grid-rows-1 gap-5 shrink-0 lg:h-[316px]">
+            <div className="dash-panel bg-white rounded-2xl p-5 border border-surface-200 shadow-sm">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-surface-700 flex items-center gap-2"><CalendarDays size={15} className="text-brand-400" /> Milestone Calendar</h3>
                 <div className="flex items-center gap-1.5">
-                  <button type="button" onClick={() => setCalMonth(new Date(calY, calM - 1, 1))} aria-label="Previous month" className="dash-cal-nav"><ChevronLeft size={15} /></button>
+                  <button type="button" disabled={calAtMin} onClick={() => { if (!calAtMin) setCalMonth(new Date(calY, calM - 1, 1)) }} aria-label="Previous month" className="dash-cal-nav"><ChevronLeft size={15} /></button>
                   <span className="text-xs font-semibold text-surface-600 w-28 text-center tabular-nums">{calLabel}</span>
                   <button type="button" onClick={() => setCalMonth(new Date(calY, calM + 1, 1))} aria-label="Next month" className="dash-cal-nav"><ChevronRight size={15} /></button>
                 </div>
@@ -1820,6 +1832,27 @@ function Dashboard() {
                       <span className="dash-bar-label">{owner}</span>
                       <span className="dash-bar-track"><span className="dash-bar-fill" style={{ width: `${Math.max(6, maxOwnerLoad ? (n / maxOwnerLoad) * 100 : 0)}%` }} /></span>
                       <span className="dash-bar-value">{n}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="dash-panel bg-white rounded-2xl p-5 border border-surface-200 shadow-sm">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <h3 className="text-sm font-semibold text-surface-700 flex items-center gap-2 min-w-0"><ListChecks size={15} className="text-brand-400 shrink-0" /> <span className="truncate">Completion by Project</span></h3>
+                <div className="dash-mini-seg shrink-0" role="tablist">
+                  <button role="tab" aria-selected={projFilter === 'all'} className={projFilter === 'all' ? 'is-active' : ''} onClick={() => setProjFilter('all')}>All</button>
+                  <button role="tab" aria-selected={projFilter === 'active'} className={projFilter === 'active' ? 'is-active' : ''} onClick={() => setProjFilter('active')}>Active</button>
+                  <button role="tab" aria-selected={projFilter === 'done'} className={projFilter === 'done' ? 'is-active' : ''} onClick={() => setProjFilter('done')}>Done</button>
+                </div>
+              </div>
+              {projMsShown.length === 0 ? <p className="text-sm text-surface-400 py-4">{projMsStats.length === 0 ? 'No projects have milestones yet.' : projFilter === 'done' ? 'No projects are fully complete yet.' : 'All projects with milestones are complete.'}</p> : (
+                <div className="dash-barlist dash-list-scroll">
+                  {projMsShown.map(s => (
+                    <button key={s.id} className="dash-bar-row" onClick={() => navigate(`/projects/${s.id}`)} title={`${s.name} — ${s.done}/${s.total} milestones (${s.pct}%)`}>
+                      <span className="dash-bar-label">{s.name}</span>
+                      <span className="dash-bar-track"><span className="dash-bar-fill" style={{ width: `${Math.max(4, s.pct)}%`, background: 'linear-gradient(90deg,#10b981,#34d399)' }} /></span>
+                      <span className="dash-bar-value">{s.pct}%</span>
                     </button>
                   ))}
                 </div>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, CartesianGrid, Legend
+  PieChart, Pie, Cell, Sector, LineChart, Line, CartesianGrid, Legend
 } from 'recharts'
 import { ChevronRight } from 'lucide-react'
 
@@ -43,28 +43,55 @@ function TabToggle({ options, value, onChange }) {
   )
 }
 
+// Hovered slice: lift it out of the ring (bigger radius) and drop a soft shadow
+// so it reads as a raised 3D wedge.
+function renderActiveShape(props) {
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props
+  return (
+    <g style={{ filter: 'drop-shadow(0 4px 7px rgba(0,0,0,0.5))' }}>
+      <Sector cx={cx} cy={cy} innerRadius={innerRadius - 2} outerRadius={outerRadius + 8}
+        startAngle={startAngle} endAngle={endAngle} fill={fill} stroke="rgba(255,255,255,0.18)" strokeWidth={1} />
+    </g>
+  )
+}
+
 function DonutWithLegend({ data, colors, onSlice }) {
   const total = data.reduce((s, d) => s + d.value, 0)
+  const [active, setActive] = useState(null) // hovered slice index
+  const sel = active != null ? data[active] : null
+  const selColor = active != null ? colors[active % colors.length] : null
   return (
     <div className="flex items-center gap-3">
       <div className="dash-donut-wrap shrink-0">
         <ResponsiveContainer width="100%" height={150}>
           <PieChart>
-            <Pie data={data} cx="50%" cy="50%" innerRadius={42} outerRadius={62} paddingAngle={3} dataKey="value"
-              onClick={(d) => onSlice(d)} cursor="pointer" stroke="none">
+            <Pie data={data} cx="50%" cy="50%" innerRadius={42} outerRadius={60} paddingAngle={3} dataKey="value"
+              activeIndex={active == null ? undefined : active} activeShape={renderActiveShape}
+              onMouseEnter={(_, i) => setActive(i)} onMouseLeave={() => setActive(null)}
+              onClick={(d) => onSlice(d)} cursor="pointer" stroke="none" isAnimationActive={false}>
               {data.map((_, i) => <Cell key={i} fill={colors[i % colors.length]} />)}
             </Pie>
-            <RTooltip contentStyle={TOOLTIP} />
           </PieChart>
         </ResponsiveContainer>
         <div className="dash-donut-center">
-          <span className="dash-donut-total">{total}</span>
-          <span className="dash-donut-label">Total</span>
+          {sel ? (
+            <>
+              <span className="dash-donut-total" style={{ color: selColor }}>{sel.value}</span>
+              <span className="dash-donut-label dash-donut-name">{sel.name}</span>
+            </>
+          ) : (
+            <>
+              <span className="dash-donut-total">{total}</span>
+              <span className="dash-donut-label">Total</span>
+            </>
+          )}
         </div>
       </div>
       <div className="flex-1 min-w-0 space-y-1">
         {data.map((d, i) => (
-          <button key={d.name} type="button" onClick={() => onSlice(d)} className="dash-legend-row">
+          <button key={d.name} type="button" onClick={() => onSlice(d)}
+            onMouseEnter={() => setActive(i)} onMouseLeave={() => setActive(null)}
+            className={`dash-legend-row ${active === i ? 'is-active' : ''}`}>
             <span className="dash-legend-dot" style={{ background: colors[i % colors.length] }} />
             <span className="dash-legend-name">{d.name}</span>
             <span className="dash-legend-val">{d.value}<span className="dash-legend-pct">{total ? Math.round((d.value / total) * 100) : 0}%</span></span>

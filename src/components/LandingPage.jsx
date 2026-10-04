@@ -1237,7 +1237,12 @@ export default function LandingPage({ isAdmin, theme, setTheme }) {
           )
         })()}
 
-        <div className="relative max-w-6xl mx-auto px-6 lg:px-8 pt-[138px] lg:pt-[168px] pb-6 lg:pb-8 min-h-screen flex flex-col items-center justify-center text-center">
+        {/* Height is 100vh PLUS the wrapper's negative margin. The wrapper
+            above pulls the hero up by 1/1.5/2rem to bleed past the padded
+            <main>, so a plain min-h-screen ends that same distance short of
+            the bottom of the screen and the next section peeks through as a
+            dark strip. The three values track -m-4 / sm:-m-6 / lg:-m-8. */}
+        <div className="relative max-w-6xl mx-auto px-6 lg:px-8 pt-[138px] lg:pt-[168px] pb-6 lg:pb-8 min-h-[calc(100vh+1rem)] sm:min-h-[calc(100vh+1.5rem)] lg:min-h-[calc(100vh+2rem)] flex flex-col items-center justify-center text-center">
           {/* Eyebrow rule + label — champagne gold to match the luxe theme */}
           <div className="hero-eyebrow flex items-center gap-3 mb-5">
             <span className="hero-eyebrow-rule h-px w-10" />
@@ -1303,12 +1308,20 @@ export default function LandingPage({ isAdmin, theme, setTheme }) {
           </div>
         </div>
 
-        {/* Bottom-right corner branding mark — subtle watermark */}
+        {/* Bottom-right corner branding mark — subtle watermark. The UTC
+            monogram is squarer than the old wordmark, so the widths come
+            down to keep the same optical footprint in the corner.
+
+            The right offsets have to clear the wrapper's negative margin
+            (1/1.5/2rem), because that bleeds the hero past the right edge of
+            the screen — anything nearer than that is cut off. The old
+            wordmark hid this: it carried ~9% transparent padding, so the
+            clip only ate empty pixels. This PNG is tight to its canvas. */}
         <img
-          src="./hero-corner-logo.png"
+          src="./utc-metallic-logo.png"
           alt=""
           aria-hidden="true"
-          className="absolute right-4 bottom-4 sm:right-6 sm:bottom-6 w-32 sm:w-40 lg:w-48 h-auto pointer-events-none"
+          className="absolute right-8 bottom-4 sm:right-12 sm:bottom-6 lg:right-14 w-28 sm:w-32 lg:w-40 h-auto pointer-events-none"
         />
       </section>
 
@@ -1577,7 +1590,7 @@ export default function LandingPage({ isAdmin, theme, setTheme }) {
             {/* Union Trading Co. logo — full opacity, no drop-shadow */}
             <div className="flex items-center justify-center sm:justify-start">
               <img
-                src="./union-trading-logo.png"
+                src="./utc-metallic-logo.png"
                 alt="Union Trading Co."
                 className="h-16 sm:h-20 w-auto object-contain landing-footer-logo"
               />

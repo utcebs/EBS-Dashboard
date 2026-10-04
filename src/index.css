@@ -2812,7 +2812,7 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .landing-light [data-hero] img[src*="union-trading-logo-white"] {
   filter: brightness(0);
 }
-.landing-light [data-hero] img[src*="hero-corner-logo"] {
+.landing-light [data-hero] img[src*="utc-metallic-logo"] {
   filter: brightness(0);
   opacity: 0.55;
 }

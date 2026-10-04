@@ -3301,12 +3301,97 @@ function LoginPage() {
 // ─── ADMIN TEAM PAGE ────────────────────────────────────────
 // Lets an admin choose which profiles appear on the landing page team
 // section, set display order, mark one as team lead, edit job title + bio.
+// ─── ADMIN LANDING TEAM ─────────────────────────────────────
+
+// Nulls and duplicates are both legal in display_order, so a bare two-row swap
+// can be a no-op. Every reorder renumbers the whole list 1..n instead.
+const byTeamOrder = (a, b) => {
+  const ao = a.display_order ?? 9999, bo = b.display_order ?? 9999
+  if (ao !== bo) return ao - bo
+  return (a.full_name || '').localeCompare(b.full_name || '')
+}
+
+// Pick a photo, look at it, then upload. The inline uploader on the landing page
+// sent the file the moment the dialog closed — a wrong pick was live before you
+// could see it.
+function TeamPhotoPicker({ member, onSaved }) {
+  const [pick, setPick] = useState(null)   // { file, url } — url is a blob, local only
+  const [busy, setBusy] = useState(false)
+  const fileRef = useRef(null)
+
+  // Cleanup runs with the *previous* pick, which is exactly the blob to release.
+  useEffect(() => () => { if (pick?.url) URL.revokeObjectURL(pick.url) }, [pick])
+
+  const choose = e => {
+    const file = e.target.files?.[0]
+    if (fileRef.current) fileRef.current.value = ''   // so re-picking the same file fires onChange
+    if (!file) return
+    if (!file.type.startsWith('image/')) { showToast('That file is not an image', 'error'); return }
+    if (file.size > 5 * 1024 * 1024) { showToast('That image is over 5 MB — please pick a smaller one', 'error'); return }
+    setPick({ file, url: URL.createObjectURL(file) })
+  }
+
+  const commit = async () => {
+    if (!pick) return
+    setBusy(true)
+    try {
+      const ext = (pick.file.name.split('.').pop() || '').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+      const path = `${member.id}/${Date.now()}.${ext}`
+      const { error: upErr } = await supabase.storage.from('team-photos')
+        .upload(path, pick.file, { cacheControl: '3600', upsert: true })
+      if (upErr) throw upErr
+      const { data: { publicUrl } } = supabase.storage.from('team-photos').getPublicUrl(path)
+      await onSaved(publicUrl)
+      setPick(null)
+      showToast('Photo updated', 'success')
+    } catch (e) { showToast('Upload failed: ' + (e.message || e), 'error') }
+    finally { setBusy(false) }
+  }
+
+  const shown = pick?.url || member.avatar_url
+
+  return (
+    <div className="shrink-0 w-[88px]">
+      <div className={`relative w-[88px] h-[88px] rounded-xl overflow-hidden bg-surface-100 border ${pick ? 'border-brand-400 ring-2 ring-brand-200' : 'border-surface-200'} flex items-center justify-center`}>
+        {shown
+          ? <img src={shown} alt="" className="w-full h-full object-cover" />
+          : <User size={28} className="text-surface-300" />}
+        {pick && <span className="absolute bottom-0 inset-x-0 bg-brand-600/90 text-white text-[10px] font-semibold text-center py-0.5">Not saved yet</span>}
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" onChange={choose} className="hidden" />
+      {pick ? (
+        <div className="flex gap-1 mt-1.5">
+          <button onClick={commit} disabled={busy}
+            className="flex-1 px-1.5 py-1 rounded-md bg-brand-600 text-white text-[11px] font-medium hover:bg-brand-700 disabled:opacity-50">
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+          <button onClick={() => setPick(null)} disabled={busy}
+            className="px-1.5 py-1 rounded-md border border-surface-200 text-surface-500 text-[11px] hover:bg-surface-50 disabled:opacity-50"
+            title="Discard this photo">
+            <X size={12} />
+          </button>
+        </div>
+      ) : (
+        <button onClick={() => fileRef.current?.click()}
+          className="w-full mt-1.5 flex items-center justify-center gap-1 px-1.5 py-1 rounded-md border border-surface-200 text-surface-600 text-[11px] font-medium hover:bg-surface-50">
+          <Upload size={11} /> {member.avatar_url ? 'Replace' : 'Photo'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function AdminTeamPage() {
   const { isAdmin, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [profiles, setProfiles] = useState([])
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState(null)
+  const [reordering, setReordering] = useState(false)
+  const [addId, setAddId] = useState('')
+  const [showCreate, setShowCreate] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [nf, setNf] = useState({ full_name: '', email: '', password: '', job_title: '', role: 'user' })
 
   // Wait for auth to settle before judging admin status — isAdmin is false
   // during the async profile load, which otherwise flash-redirects a real admin
@@ -3336,91 +3421,229 @@ function AdminTeamPage() {
       }
       const { error } = await supabase.from('profiles').update(patch).eq('id', id)
       if (error) throw error
-      setProfiles(ps => ps.map(p => p.id === id ? { ...p, ...patch, ...(patch.is_team_lead ? { } : {}) } : (patch.is_team_lead ? { ...p, is_team_lead: false } : p)))
-      showToast('Profile updated', 'success')
+      setProfiles(ps => ps.map(p => p.id === id ? { ...p, ...patch } : (patch.is_team_lead ? { ...p, is_team_lead: false } : p)))
+      showToast('Saved', 'success')
     } catch (e) { showToast('Save failed: ' + (e.message || e), 'error') }
     finally { setSavingId(null) }
+  }
+
+  const onLanding = profiles.filter(p => p.show_on_landing).sort(byTeamOrder)
+  const offLanding = profiles.filter(p => !p.show_on_landing)
+    .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''))
+  const nextOrder = onLanding.reduce((m, p) => Math.max(m, p.display_order ?? 0), 0) + 1
+
+  const move = async (id, dir) => {
+    const list = onLanding.slice()
+    const i = list.findIndex(p => p.id === id)
+    const j = i + dir
+    if (i < 0 || j < 0 || j >= list.length) return
+    const swap = list[i]; list[i] = list[j]; list[j] = swap
+    const orders = new Map(list.map((p, k) => [p.id, k + 1]))
+    const changed = list.filter(p => (p.display_order ?? null) !== orders.get(p.id))
+    setReordering(true)
+    setProfiles(ps => ps.map(p => orders.has(p.id) ? { ...p, display_order: orders.get(p.id) } : p))
+    try {
+      for (const p of changed) {
+        const { error } = await supabase.from('profiles').update({ display_order: orders.get(p.id) }).eq('id', p.id)
+        if (error) throw error
+      }
+    } catch (e) {
+      showToast('Could not save the new order: ' + (e.message || e), 'error')
+      load()   // put the list back to whatever the database actually holds
+    } finally { setReordering(false) }
+  }
+
+  const addToLanding = async id => {
+    if (!id) return
+    await updateProfile(id, { show_on_landing: true, display_order: nextOrder })
+    setAddId('')
+  }
+
+  const removeFromLanding = p =>
+    updateProfile(p.id, { show_on_landing: false, ...(p.is_team_lead ? { is_team_lead: false } : {}) })
+
+  // A team member is a profiles row, and profiles.id points at a real login
+  // account — so a brand-new face has to be created as a user first.
+  const createPerson = async () => {
+    if (!nf.full_name.trim()) { showToast('A name is needed', 'error'); return }
+    if (!nf.email.trim() || nf.password.length < 6) { showToast('An email and a password of at least 6 characters are needed', 'error'); return }
+    setCreating(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-create-user', {
+        body: { email: nf.email.trim(), password: nf.password, full_name: nf.full_name.trim(), role: nf.role }
+      })
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
+      const { error: upErr } = await supabase.from('profiles')
+        .update({ job_title: nf.job_title.trim(), show_on_landing: true, display_order: nextOrder })
+        .eq('id', data.id)
+      if (upErr) throw upErr
+      showToast(nf.full_name.trim() + ' added to the team', 'success')
+      setNf({ full_name: '', email: '', password: '', job_title: '', role: 'user' })
+      setShowCreate(false)
+      await load()
+    } catch (e) { showToast('Could not add them: ' + (e.message || e), 'error') }
+    finally { setCreating(false) }
   }
 
   if (authLoading) return <Spinner />
   if (!isAdmin) return null
   if (loading) return <Spinner />
 
+  const arrowCls = 'p-1 rounded-md border border-surface-200 text-surface-500 hover:bg-surface-50 disabled:opacity-25 disabled:hover:bg-transparent'
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold font-display text-surface-900">Landing Team</h1>
-        <p className="text-sm text-surface-500 mt-1">Choose who appears in the team section on the landing page. Mark one member as lead — the rest show below.</p>
+        <p className="text-sm text-surface-500 mt-1">
+          Who appears in the team section of the landing page, and in what order. One member is the lead and sits at the top; the rest show below in this order.
+        </p>
       </div>
 
-      <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-        <table className="w-full">
-          <thead><tr className="bg-surface-50 border-b border-surface-200 text-xs font-semibold text-surface-500 uppercase">
-            <th className="px-4 py-3 text-left">Name</th>
-            <th className="px-4 py-3 text-left">Job Title</th>
-            <th className="px-4 py-3 text-center">Show on Landing</th>
-            <th className="px-4 py-3 text-center">Lead</th>
-            <th className="px-4 py-3 text-center">Order</th>
-          </tr></thead>
-          <tbody className="divide-y divide-surface-100">
-            {profiles.map(p => (
-              <tr key={p.id} className={savingId === p.id ? 'opacity-50' : ''}>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    {p.avatar_url
-                      ? <img src={p.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
-                      : <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center"><User size={14} className="text-brand-600" /></div>}
-                    <div>
-                      <p className="text-sm font-medium text-surface-800">{p.full_name || '(no name)'}</p>
-                      <p className="text-xs text-surface-400">{p.email}</p>
-                    </div>
+      {/* ── On the landing page ── */}
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-xs font-semibold text-surface-500 uppercase tracking-wide">
+          On the landing page · {onLanding.length}
+        </h2>
+        {reordering && <span className="text-xs text-surface-400 flex items-center gap-1"><RefreshCw size={11} className="animate-spin" /> saving order…</span>}
+      </div>
+
+      {onLanding.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-dashed border-surface-300 p-8 text-center mb-6">
+          <Users size={24} className="text-surface-300 mx-auto mb-2" />
+          <p className="text-sm text-surface-500">Nobody is on the landing page yet. Add someone below.</p>
+        </div>
+      ) : (
+        <div className="space-y-3 mb-6">
+          {onLanding.map((p, i) => (
+            <div key={p.id} className={`bg-white rounded-2xl border border-surface-200 shadow-sm p-4 transition-opacity ${savingId === p.id ? 'opacity-50' : ''}`}>
+              <div className="flex items-start gap-4">
+                <div className="flex flex-col items-center gap-1 pt-1">
+                  <button onClick={() => move(p.id, -1)} disabled={i === 0 || reordering} className={arrowCls} title="Move up">
+                    <ChevronUp size={14} />
+                  </button>
+                  <span className="text-[11px] font-semibold text-surface-400 tabular-nums">{i + 1}</span>
+                  <button onClick={() => move(p.id, 1)} disabled={i === onLanding.length - 1 || reordering} className={arrowCls} title="Move down">
+                    <ChevronDown size={14} />
+                  </button>
+                </div>
+
+                <TeamPhotoPicker member={p} onSaved={url => updateProfile(p.id, { avatar_url: url })} />
+
+                <div className="flex-1 min-w-0 space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-surface-800">{p.full_name || '(no name)'}</p>
+                    {p.is_team_lead && <span className="px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[10px] font-semibold uppercase tracking-wide">Lead</span>}
+                    <span className="text-xs text-surface-400 truncate">{p.email}</span>
                   </div>
-                </td>
-                <td className="px-4 py-3">
                   <input
                     type="text"
                     defaultValue={p.job_title || ''}
                     placeholder="Job title"
                     onBlur={e => { if (e.target.value !== (p.job_title || '')) updateProfile(p.id, { job_title: e.target.value }) }}
-                    className="w-full px-2 py-1 rounded border border-surface-200 text-sm bg-white focus:outline-none focus:border-brand-400"
+                    className="w-full px-2 py-1.5 rounded-lg border border-surface-200 text-sm bg-white focus:outline-none focus:border-brand-400"
                   />
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <input
-                    type="checkbox"
-                    checked={!!p.show_on_landing}
-                    onChange={e => updateProfile(p.id, { show_on_landing: e.target.checked })}
-                    className="w-4 h-4 accent-brand-600"
+                  <textarea
+                    defaultValue={p.bio || ''}
+                    rows={2}
+                    placeholder="Short bio — shown on the back of the card when a visitor hovers"
+                    onBlur={e => { if (e.target.value !== (p.bio || '')) updateProfile(p.id, { bio: e.target.value }) }}
+                    className="w-full px-2 py-1.5 rounded-lg border border-surface-200 text-sm bg-white focus:outline-none focus:border-brand-400 resize-y"
                   />
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <input
-                    type="radio"
-                    name="team_lead"
-                    checked={!!p.is_team_lead}
-                    onChange={() => updateProfile(p.id, { is_team_lead: true })}
-                    className="w-4 h-4 accent-brand-600"
-                  />
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <input
-                    type="number"
-                    defaultValue={p.display_order ?? ''}
-                    onBlur={e => {
-                      const v = e.target.value === '' ? null : parseInt(e.target.value, 10)
-                      if (v !== p.display_order) updateProfile(p.id, { display_order: v })
-                    }}
-                    className="w-16 px-2 py-1 rounded border border-surface-200 text-sm text-center"
-                  />
-                </td>
-              </tr>
+                </div>
+
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                  <label className="flex items-center gap-1.5 text-xs text-surface-600 cursor-pointer whitespace-nowrap" title="The lead sits above everyone else">
+                    <input
+                      type="radio"
+                      name="team_lead"
+                      checked={!!p.is_team_lead}
+                      onChange={() => updateProfile(p.id, { is_team_lead: true })}
+                      className="w-3.5 h-3.5 accent-brand-600"
+                    />
+                    Lead
+                  </label>
+                  <button onClick={() => removeFromLanding(p)}
+                    className="flex items-center gap-1 px-2 py-1 rounded-md border border-surface-200 text-surface-500 text-[11px] font-medium hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+                    title="Take off the landing page — the account and its photo are kept">
+                    <X size={11} /> Remove
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Add someone ── */}
+      <div className="bg-white rounded-2xl border border-surface-200 shadow-sm p-5">
+        <h2 className="text-sm font-semibold text-surface-700 mb-3">Add a member</h2>
+
+        <div className="flex gap-2 items-center flex-wrap">
+          <select value={addId} onChange={e => setAddId(e.target.value)}
+            className="flex-1 min-w-[220px] px-3 py-2 rounded-lg border border-surface-200 bg-white text-sm text-surface-800 focus:outline-none focus:border-brand-400">
+            <option value="">{offLanding.length ? 'Someone who already has an account…' : 'Everyone with an account is already on the page'}</option>
+            {offLanding.map(p => (
+              <option key={p.id} value={p.id}>{(p.full_name || p.email) + (p.job_title ? ' — ' + p.job_title : '')}</option>
             ))}
-          </tbody>
-        </table>
+          </select>
+          <button onClick={() => addToLanding(addId)} disabled={!addId || savingId !== null}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-40">
+            <Plus size={14} /> Add
+          </button>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-surface-100">
+          {!showCreate ? (
+            <button onClick={() => setShowCreate(true)}
+              className="flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700">
+              <Plus size={14} /> Someone new, with no account yet
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-surface-500">
+                A team member is a user of this system, so a new face needs a login. They are created and put on the landing page in one step — give them the password afterwards, or send a reset link from User Management.
+              </p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <FormField label="Full name *">
+                  <input id="team-new-name" name="team_new_name" autoComplete="off" className={inputCls} type="text"
+                    value={nf.full_name} onChange={e => setNf({ ...nf, full_name: e.target.value })} placeholder="Jane Smith" />
+                </FormField>
+                <FormField label="Job title">
+                  <input id="team-new-title" name="team_new_title" autoComplete="off" className={inputCls} type="text"
+                    value={nf.job_title} onChange={e => setNf({ ...nf, job_title: e.target.value })} placeholder="Project Engineer" />
+                </FormField>
+                <FormField label="Email *">
+                  <input id="team-new-email" name="team_new_email" autoComplete="off" className={inputCls} type="email"
+                    value={nf.email} onChange={e => setNf({ ...nf, email: e.target.value })} placeholder="jane@company.com" />
+                </FormField>
+                <FormField label="Password *">
+                  <input id="team-new-password" name="team_new_password" autoComplete="new-password" className={inputCls} type="password"
+                    value={nf.password} onChange={e => setNf({ ...nf, password: e.target.value })} placeholder="Min 6 characters" />
+                </FormField>
+                <FormField label="Role" className="sm:col-span-2">
+                  <select className={inputCls} value={nf.role} onChange={e => setNf({ ...nf, role: e.target.value })}>
+                    <option value="user">User — view projects + log EBS tasks</option>
+                    <option value="admin">Admin — full access to everything</option>
+                  </select>
+                </FormField>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => setShowCreate(false)} disabled={creating}
+                  className="px-4 py-2 rounded-lg border border-surface-200 text-surface-600 hover:bg-surface-50 font-medium text-sm disabled:opacity-50">Cancel</button>
+                <button onClick={createPerson} disabled={creating || !nf.full_name.trim() || !nf.email.trim() || nf.password.length < 6}
+                  className="px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 font-medium text-sm disabled:opacity-40">
+                  {creating ? 'Adding…' : 'Create and add'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <p className="text-xs text-surface-400 mt-4">
-        Photos are uploaded inline from the landing page itself (hover on any photo).
+        Job title and bio save when you click away from the box. Photos save when you press Save under the picture — nothing is uploaded until then. Photos can also be changed from the landing page itself while signed in as an admin.
       </p>
     </div>
   )

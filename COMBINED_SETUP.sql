@@ -391,7 +391,11 @@ ALTER TABLE profiles
   ADD COLUMN IF NOT EXISTS display_order INT,
   ADD COLUMN IF NOT EXISTS show_on_landing BOOLEAN DEFAULT false,
   ADD COLUMN IF NOT EXISTS is_team_lead BOOLEAN DEFAULT false,
-  ADD COLUMN IF NOT EXISTS employee_roles TEXT[] DEFAULT '{}';
+  ADD COLUMN IF NOT EXISTS employee_roles TEXT[] DEFAULT '{}',
+  -- Soft deactivation: the row and its history stay, the login stops. The ban
+  -- itself is on auth.users, set by the admin-update-user function; this is
+  -- the copy the app can read. See 2026-10-04_profile-active-flag.sql.
+  ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
 
 -- priority_tasks — on-hold status + reason tracking
 ALTER TABLE priority_tasks DROP CONSTRAINT IF EXISTS priority_tasks_status_check;

@@ -1347,6 +1347,12 @@ function Layout() {
               className={`luxe-link flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium ${location.pathname === '/admin/team' ? 'is-active' : ''}`}>
               <UserCog size={18} /> Landing Team
             </Link>
+            {/* /admin/users had no link anywhere — the route existed but the
+                only way in was typing the URL. */}
+            <Link to="/admin/users" onClick={() => setSidebarOpen(false)}
+              className={`luxe-link flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium ${location.pathname === '/admin/users' ? 'is-active' : ''}`}>
+              <Users size={18} /> User Management
+            </Link>
             <button onClick={signOut} className="luxe-link flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium w-full">
               <LogOut size={18} /> Sign Out
             </button>
@@ -3400,11 +3406,14 @@ function AdminTeamPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabasePublic
-      .from('profiles')
-      .select('id, full_name, email, role, job_title, bio, avatar_url, display_order, show_on_landing, is_team_lead')
+    const cols = 'id, full_name, email, role, job_title, bio, avatar_url, display_order, show_on_landing, is_team_lead'
+    const q = (sel) => supabasePublic.from('profiles').select(sel)
       .order('display_order', { ascending: true, nullsFirst: false })
       .order('full_name')
+    // is_active arrives with the 2026-10-04 migration; fall back to the query
+    // without it rather than showing an empty team page.
+    let { data, error } = await q(cols + ', is_active')
+    if (error) ({ data } = await q(cols))
     setProfiles(data || [])
     setLoading(false)
   }, [])
@@ -3428,7 +3437,9 @@ function AdminTeamPage() {
   }
 
   const onLanding = profiles.filter(p => p.show_on_landing).sort(byTeamOrder)
-  const offLanding = profiles.filter(p => !p.show_on_landing)
+  // A deactivated person has already been taken off the landing page; don't
+  // offer to put them back. (undefined means the migration has not run yet.)
+  const offLanding = profiles.filter(p => !p.show_on_landing && p.is_active !== false)
     .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''))
   const nextOrder = onLanding.reduce((m, p) => Math.max(m, p.display_order ?? 0), 0) + 1
 
@@ -3660,9 +3671,67 @@ function AdminUsersPage() {
   const [newRole, setNewRole] = useState('user')
   const [message, setMessage] = useState(''); const [error, setError] = useState('')
   const [resetTarget, setResetTarget] = useState('')
+  const [people, setPeople] = useState([])
+  const [listLoading, setListLoading] = useState(true)
+  const [needsMigration, setNeedsMigration] = useState(false)
+  const [busyId, setBusyId] = useState(null)
+  const [emailFor, setEmailFor] = useState(null)   // id of the row with the email box open
+  const [emailDraft, setEmailDraft] = useState('')
 
   // Wait for auth to settle (see AdminTeamPage) before redirecting.
   useEffect(() => { if (!authLoading && !isAdmin) navigate('/login') }, [authLoading, isAdmin, navigate])
+
+  // is_active arrives with the 2026-10-04 migration. Ask for it, and if the
+  // column is not there yet fall back to the query without it rather than
+  // leaving the page blank — the rest of this screen still works.
+  const loadPeople = useCallback(async () => {
+    setListLoading(true)
+    const cols = 'id, full_name, email, role'
+    let { data, error: err } = await supabasePublic.from('profiles')
+      .select(cols + ', is_active').order('full_name')
+    if (err) {
+      setNeedsMigration(true)
+      ;({ data } = await supabasePublic.from('profiles').select(cols).order('full_name'))
+    } else {
+      setNeedsMigration(false)
+    }
+    setPeople(data || [])
+    setListLoading(false)
+  }, [])
+
+  useEffect(() => { loadPeople() }, [loadPeople])
+
+  // Both of these go through the admin-update-user edge function: the sign-in
+  // email lives in auth.users and the ban is a GoTrue call, neither of which
+  // the anon key can reach.
+  const changeEmail = async (p) => {
+    const email = emailDraft.trim().toLowerCase()
+    setError(''); setMessage(''); setBusyId(p.id)
+    try {
+      const { data, error: err } = await supabase.functions.invoke('admin-update-user', { body: { id: p.id, email } })
+      if (err) throw err
+      if (data?.error) throw new Error(data.error)
+      setMessage(`${p.full_name || 'That user'} now signs in as ${email}.`)
+      setEmailFor(null)
+      await loadPeople()
+    } catch (e) { setError(e.message || String(e)) }
+    finally { setBusyId(null) }
+  }
+
+  const setActive = async (p, active) => {
+    if (!active && !window.confirm(`Stop ${p.full_name || 'this user'} signing in?\n\nTheir account, task logs and project history are kept, and they are taken off the landing page. You can reactivate them here at any time.`)) return
+    setError(''); setMessage(''); setBusyId(p.id)
+    try {
+      const { data, error: err } = await supabase.functions.invoke('admin-update-user', { body: { id: p.id, active } })
+      if (err) throw err
+      if (data?.error) throw new Error(data.error)
+      setMessage(active
+        ? `${p.full_name || 'That user'} can sign in again.`
+        : `${p.full_name || 'That user'} can no longer sign in.`)
+      await loadPeople()
+    } catch (e) { setError(e.message || String(e)) }
+    finally { setBusyId(null) }
+  }
 
   const handleCreateUser = async () => {
     setError(''); setMessage('')
@@ -3704,6 +3773,104 @@ function AdminUsersPage() {
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center"><Shield className="text-brand-600" size={18} /></div>
         <div><p className="text-sm font-medium text-surface-800">{user?.email}</p><p className="text-xs text-surface-500">Logged in as admin</p></div>
+      </div>
+    </div>
+
+    {/* ── Everyone with an account ─────────────────────────── */}
+    <div className="bg-white rounded-2xl border border-surface-200 shadow-sm p-6 mb-6">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-sm font-semibold text-surface-700">People</h3>
+        {listLoading && <RefreshCw size={13} className="animate-spin text-surface-400" />}
+      </div>
+      <p className="text-xs text-surface-500 mb-4">
+        Change the address someone signs in with, or stop them signing in at all. Deactivating keeps their account, their task logs and their name on every project — it only closes the door, and takes them off the landing page.
+      </p>
+
+      {needsMigration && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-lg px-3 py-2 mb-4">
+          The <code>is_active</code> column is not in the database yet, so nobody can be deactivated. Run <code>supabase/migrations/2026-10-04_profile-active-flag.sql</code> in the SQL editor. Changing an email works either way.
+        </div>
+      )}
+
+      <div className="divide-y divide-surface-100 -mx-2">
+        {people.map(p => {
+          const inactive = p.is_active === false
+          const isMe = p.id === user?.id
+          return (
+            <div key={p.id} className={`px-2 py-3 ${busyId === p.id ? 'opacity-50' : ''}`}>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className={`text-sm font-medium ${inactive ? 'text-surface-400 line-through' : 'text-surface-800'}`}>
+                      {p.full_name || '(no name)'}
+                    </p>
+                    {p.role === 'admin' && <span className="px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[10px] font-semibold uppercase tracking-wide">Admin</span>}
+                    {inactive && <span className="px-1.5 py-0.5 rounded bg-surface-100 text-surface-500 text-[10px] font-semibold uppercase tracking-wide">Deactivated</span>}
+                    {isMe && <span className="text-[10px] text-surface-400">you</span>}
+                  </div>
+                  <p className="text-xs text-surface-400 truncate">{p.email || '(no email)'}</p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => { setEmailFor(emailFor === p.id ? null : p.id); setEmailDraft(p.email || '') }}
+                    disabled={busyId !== null}
+                    className="px-2.5 py-1 rounded-lg border border-surface-200 text-surface-600 text-xs font-medium hover:bg-surface-50 disabled:opacity-40"
+                  >
+                    Change email
+                  </button>
+                  <button
+                    onClick={() => setActive(p, !inactive ? false : true)}
+                    disabled={busyId !== null || (isMe && !inactive) || needsMigration}
+                    title={isMe && !inactive ? 'You cannot deactivate your own account' : undefined}
+                    className={`px-2.5 py-1 rounded-lg border text-xs font-medium disabled:opacity-40 ${
+                      inactive
+                        ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                        : 'border-surface-200 text-surface-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
+                    }`}
+                  >
+                    {inactive ? 'Reactivate' : 'Deactivate'}
+                  </button>
+                </div>
+              </div>
+
+              {emailFor === p.id && (
+                <div className="mt-3 pl-0 sm:pl-2 flex items-center gap-2 flex-wrap">
+                  <input
+                    id={`email-${p.id}`}
+                    name={`email_${p.id}`}
+                    autoComplete="off"
+                    type="email"
+                    value={emailDraft}
+                    onChange={e => setEmailDraft(e.target.value)}
+                    placeholder="name@utc.com.kw"
+                    className={`${inputCls} flex-1 min-w-[220px]`}
+                  />
+                  <button
+                    onClick={() => changeEmail(p)}
+                    disabled={busyId !== null || !emailDraft.trim() || emailDraft.trim().toLowerCase() === (p.email || '').toLowerCase()}
+                    className="px-3 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-40"
+                  >
+                    {busyId === p.id ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    onClick={() => setEmailFor(null)}
+                    disabled={busyId !== null}
+                    className="px-3 py-2 rounded-lg border border-surface-200 text-surface-600 text-sm font-medium hover:bg-surface-50 disabled:opacity-40"
+                  >
+                    Cancel
+                  </button>
+                  <p className="w-full text-xs text-surface-400">
+                    This is the address they sign in with. The password does not change.
+                  </p>
+                </div>
+              )}
+            </div>
+          )
+        })}
+        {!listLoading && people.length === 0 && (
+          <p className="px-2 py-4 text-sm text-surface-400">Nobody has an account yet.</p>
+        )}
       </div>
     </div>
 

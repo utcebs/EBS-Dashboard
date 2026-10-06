@@ -1450,11 +1450,20 @@ export default function LandingPage({ isAdmin, theme, setTheme }) {
             const leadSlot     = { start: 0.13, end: 0.38 }
             const droplineSlot = { start: 0.38, end: 0.45 }
             const trunkSlot    = { start: 0.45, end: 0.75 }
+            // Members share a fixed window (0.50 → 0.90) however many there
+            // are, so the last one always finishes inside reachable scroll.
+            // This used to be a flat 0.13 apart, tuned when there were three:
+            // the fourth member's slot then ran from 0.93 to 1.10, and since
+            // progress is clamped at 1.0 their card could only ever reach 41%
+            // of its own animation — which left the job title at 13% opacity
+            // and the name at 79%. A sixth member was invisible altogether.
+            const MEMBERS_FROM = 0.50, MEMBERS_TO = 0.90
+            const span = (MEMBERS_TO - MEMBERS_FROM) / (members.length || 1)
             const memberSlots = members.map((_, i) => {
-              const baseStart = 0.50 + i * 0.13  // M0 0.50, M1 0.63, M2 0.76
+              const baseStart = MEMBERS_FROM + i * span
               return {
-                drop: { start: baseStart,        end: baseStart + 0.05 },
-                card: { start: baseStart + 0.04, end: baseStart + 0.17 },
+                drop: { start: baseStart,             end: baseStart + span * 0.3 },
+                card: { start: baseStart + span * 0.25, end: baseStart + span },
               }
             })
 

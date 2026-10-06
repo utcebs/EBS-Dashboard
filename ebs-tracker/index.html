@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="EBS Tracker" />
+  <meta name="theme-color" content="#0c0a08" />
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="apple-touch-startup-image" href="icon-512.png" />
+  <title>EBS Tracker — Login</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .rpg-particles { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+    .rpg-particles span {
+      position: absolute; font-size: 20px; opacity: 0.06;
+      animation: float linear infinite;
+    }
+    @keyframes float { 0%{transform:translateY(100vh) rotate(0deg);opacity:0} 10%{opacity:.06} 90%{opacity:.06} 100%{transform:translateY(-100px) rotate(360deg);opacity:0} }
+    .auto-login-banner {
+      background: rgba(16,185,129,0.12);
+      border: 1px solid rgba(16,185,129,0.3);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #6ee7b7;
+      text-align: center;
+      margin-bottom: 12px;
+      display: none;
+    }
+    /* Hide login form until session check completes to prevent flash */
+    .login-box { visibility: hidden; }
+    .login-box.ready { visibility: visible; }
+    .auth-check {
+      position: fixed; inset: 0; display: flex;
+      align-items: center; justify-content: center;
+      background:
+        radial-gradient(120% 60% at 0% 0%, rgba(212,184,123,0.08), transparent 55%),
+        radial-gradient(80% 50% at 100% 100%, rgba(138,99,40,0.06), transparent 60%),
+        linear-gradient(180deg, #0c0a08 0%, #0a0907 60%, #070608 100%);
+      z-index: 5;
+      flex-direction: column; gap: 14px;
+    }
+    .auth-check.hidden { display: none; }
+    .auth-check-spinner {
+      width: 36px; height: 36px;
+      border: 3px solid rgba(212,184,123,0.18);
+      border-top-color: #e6cf94;
+      border-radius: 50%; animation: spin 0.9s linear infinite;
+      box-shadow: 0 0 12px rgba(212,184,123,0.20);
+    }
+    .auth-check-text {
+      color: #caa15a; font-size: 11px;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      letter-spacing: 0.28em; text-transform: uppercase; font-weight: 500;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<script>document.addEventListener("DOMContentLoaded",()=>{if(typeof initTheme==="function"){initTheme();injectThemeToggle();}});</script>
+  <!-- Full-page auth check overlay: visible while we detect an existing Supabase session. -->
+  <div class="auth-check" id="authCheck">
+    <div class="auth-check-spinner"></div>
+    <div class="auth-check-text">Checking your session…</div>
+  </div>
+
+  <div class="login-page">
+    <div class="rpg-particles" id="particles"></div>
+
+    <div class="login-box fade-in" id="loginBox">
+      <div class="login-logo">
+        <img src="logo.png" alt="EBS Tracker" class="logo-dark" style="height:52px;mix-blend-mode:screen;margin-bottom:10px;" /><img src="logo-light.png" alt="EBS Tracker" class="logo-light" style="height:52px;margin-bottom:10px;display:none;" />
+        <h1>EBS Tracker</h1>
+        <p>Your office quest begins here</p>
+      </div>
+
+      <div class="auto-login-banner" id="autoLoginBanner">
+        🔄 Detecting existing session…
+      </div>
+
+      <div class="login-error" id="loginError"></div>
+
+      <div class="form-group">
+        <label class="form-label" for="emailInput">Email</label>
+        <input type="email" id="emailInput" class="form-control" placeholder="Enter your email" autocomplete="email" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <input type="password" id="password" class="form-control" placeholder="Enter your password" autocomplete="current-password" />
+      </div>
+
+      <button class="btn btn-primary btn-lg" id="loginBtn" style="width:100%; justify-content:center; margin-top:8px;">
+        Let&rsquo;s Go
+      </button>
+
+      <p style="text-align:center; margin-top:20px; font-size:12px; color:var(--text-3);">
+        Powered by Supabase · v2.0
+      </p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    // ── Auto-login: check if already authenticated (via EBS Tracker or Project Website) ──
+    // Overlay is shown by default (CSS `.auth-check`). We either redirect (if a session
+    // is found) or swap the overlay out for the login form. This prevents the brief
+    // login-screen flash admins saw when arriving from the React app.
+    (async () => {
+      const overlay = document.getElementById('authCheck');
+      const box = document.getElementById('loginBox');
+      try {
+        const synced = await syncSessionFromSupabase();
+        if (synced) {
+          overlay.querySelector('.auth-check-text').textContent =
+            `✅ Welcome back, ${synced.fullName}! Redirecting…`;
+          window.location.href = synced.role === 'admin' ? 'admin.html' : 'dashboard.html';
+          return;
+        }
+      } catch (e) {
+        console.error('Auth check failed:', e);
+      }
+      // No session — reveal the login form, hide overlay
+      overlay.classList.add('hidden');
+      box.classList.add('ready');
+    })();
+
+    // ── Floating particles ──────────────────────────────────────
+    const emojis = ['⚔️','🛡️','⚡','🔮','🌟','👑','🏹','🎯','🔥','💯'];
+    const container = document.getElementById('particles');
+    for (let i = 0; i < 15; i++) {
+      const span = document.createElement('span');
+      span.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+      span.style.left = Math.random() * 100 + 'vw';
+      span.style.animationDuration = (8 + Math.random() * 14) + 's';
+      span.style.animationDelay = (Math.random() * 10) + 's';
+      container.appendChild(span);
+    }
+
+    // ── Login handler ───────────────────────────────────────────
+    const loginBtn = document.getElementById('loginBtn');
+    const errEl    = document.getElementById('loginError');
+
+    async function doLogin() {
+      const email    = document.getElementById('emailInput').value.trim();
+      const password = document.getElementById('password').value;
+      if (!email || !password) {
+        errEl.textContent = 'Please enter your email and password.';
+        errEl.classList.add('show');
+        return;
+      }
+      loginBtn.disabled = true;
+      loginBtn.innerHTML = '<span class="spinner"></span> Authenticating…';
+      errEl.classList.remove('show');
+
+      const result = await login(email, password);
+      if (result.success) {
+        loginBtn.innerHTML = '✅ Welcome back!';
+        setTimeout(() => {
+          window.location.href = result.user.role === 'admin' ? 'admin.html' : 'dashboard.html';
+        }, 600);
+      } else {
+        errEl.textContent = result.error;
+        errEl.classList.add('show');
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = 'Let&rsquo;s Go';
+      }
+    }
+
+    loginBtn.addEventListener('click', doLogin);
+    document.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+    }
+  </script>
+</body>
+</html>

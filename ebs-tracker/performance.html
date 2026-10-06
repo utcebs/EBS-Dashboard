@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="EBS Tracker" />
+  <meta name="theme-color" content="#0c0a08" />
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="apple-touch-startup-image" href="icon-512.png" />
+  <title>EBS Tracker — My Performance</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    /* Chart.js luxury color overrides */
+    :root {
+      --chart-grid: rgba(255,255,255,0.05);
+      --chart-tick: rgba(240,235,226,0.35);
+    }
+    body.light-mode {
+      --chart-grid: rgba(26,22,18,0.06);
+      --chart-tick: rgba(90,82,74,0.5);
+    }
+  </style>
+  <style>
+    /* ── Working Time Analysis section ───── */
+    .wta-banner {
+      background: linear-gradient(135deg, #0d1f3c, #162040);
+      border: 1px solid #1e3a5f;
+      border-radius: var(--radius-lg);
+      padding: 20px 24px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .wta-period { font-size: 13px; color: var(--text-2); flex: 1; }
+    .wta-period strong { color: var(--text-1); }
+    .wta-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+    .wta-pill {
+      font-size: 11px; font-weight: 600; padding: 4px 10px;
+      border-radius: 999px; border: 1px solid;
+    }
+    .wta-pill.ramadan { border-color: #a855f7; color: #d8b4fe; background: rgba(168,85,247,0.1); }
+    .wta-pill.holiday { border-color: var(--gold); color: #fcd34d; background: rgba(245,158,11,0.1); }
+    .wta-pill.war     { border-color: var(--danger); color: #fca5a5; background: rgba(239,68,68,0.1); }
+
+    /* ── Working time KPI grid ────────────── */
+    .wt-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .wt-kpi {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      position: relative;
+      overflow: hidden;
+    }
+    .wt-kpi::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 3px;
+      border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    }
+    .wt-kpi.c-blue::after   { background: var(--info); }
+    .wt-kpi.c-teal::after   { background: var(--teal); }
+    .wt-kpi.c-green::after  { background: var(--success); }
+    .wt-kpi.c-purple::after { background: var(--accent); }
+    .wt-kpi.c-gold::after   { background: var(--gold); }
+    .wt-kpi.c-orange::after { background: #f97316; }
+
+    .wt-kpi-icon  { font-size: 20px; margin-bottom: 6px; display: block; }
+    .wt-kpi-label { font-size: 11px; color: var(--text-2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+    .wt-kpi-val   { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; line-height: 1; }
+    .wt-kpi-sub   { font-size: 11px; color: var(--text-3); margin-top: 6px; }
+
+    .vs-bar { margin-top: 10px; }
+    .vs-track { height: 5px; background: var(--border); border-radius: 999px; overflow: hidden; }
+    .vs-fill  { height: 100%; border-radius: 999px; transition: width 1s ease; }
+    .vs-label { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-3); margin-top: 4px; }
+
+    /* ── Holiday reference list ──────────── */
+    .holiday-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .holiday-chip {
+      font-size: 11px; padding: 4px 10px; border-radius: 999px;
+      background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25);
+      color: #fcd34d;
+    }
+
+    /* ── Existing styles ─────────────────── */
+    .streak-fire { font-size:20px; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.2)} }
+    .cat-hr-row { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+    .cat-hr-label { width:70px; font-size:12px; font-weight:600; }
+    .cat-hr-bar { flex:1; }
+    .cat-hr-val { width:50px; text-align:right; font-size:12px; font-weight:700; }
+  </style>
+</head>
+<body>
+<script>document.addEventListener("DOMContentLoaded",()=>{if(typeof initTheme==="function"){initTheme();injectThemeToggle();}});</script>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+<div class="app-wrapper">
+  <button class="menu-toggle" id="menuToggle">☰</button>
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="main-content fade-in" id="mainContent">
+    <div class="loading" style="margin-top:80px;flex-direction:column;gap:12px;">
+      <div class="spinner" style="width:36px;height:36px;border-width:3px;"></div>
+      <span style="color:var(--text-3)">Loading your quest stats…</span>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/utils.js"></script>
+<script>
+const session = requireAuth();
+
+async function init() {
+  initTheme(); injectThemeToggle();
+  renderSidebar('performance');
+  loadSidebarStats(session.id);
+  document.getElementById('menuToggle').addEventListener('click', () => {
+    document.getElementById('app-sidebar').classList.toggle('open');
+    document.getElementById('sidebarOverlay').classList.toggle('open');
+  });
+  await loadPerformance();
+}
+
+async function loadPerformance() {
+  // Load logs + global war days setting in parallel.
+  // Column list scoped (was select('*')) — these are the fields the
+  // performance page consumes (calculateStats, charts, badges, achievements).
+  const [logsRes, leavesRes, warRangesRes, startDateRes] = await Promise.all([
+    db.from('task_logs')
+      .select('id, log_date, month, week_number, task_project, hours_spent, category, sub_category, accomplishment, accomplishment_status, rejection_reason, is_completed')
+      .eq('user_id', session.id)
+      .order('log_date', { ascending: true }),
+    db.from('employee_leaves').select('start_date,end_date').eq('user_id', session.id),
+    db.from('war_day_ranges').select('start_date,end_date').order('start_date'),
+    db.from('app_settings').select('value').eq('key','tracker_start_date').maybeSingle(),
+  ]);
+
+  const logs       = logsRes.data || [];
+  const userLeaves = leavesRes.data || [];
+  const warRanges  = warRangesRes.error ? [] : (warRangesRes.data || []);
+  const startDate  = startDateRes.data?.value || null;
+
+  // ── Core calculations ────────────────────────────────────
+  const stats    = calculateStats(logs);
+  // Badges now come from the admin-defined `badges` table. Sync first so
+  // anything newly earned this session is recorded, then read back the full
+  // active list + earned set for the current user.
+  const earnedSet  = await syncUserBadges(session.id, stats);
+  const { badges: activeBadges } = await fetchUserBadges(session.id);
+  const badges = activeBadges.map(b => ({ ...b, earned: earnedSet.has(b.id) }));
+  const earnedCount = badges.filter(b => b.earned).length;
+  const initials = session.fullName.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0, 2);
+
+  // ── Working time analysis ────────────────────────────────
+  const wt         = getWorkingDaysInfo(0, userLeaves, warRanges, startDate);
+  const daysWorked = stats.uniqueDays;  // unique days with ≥1 log
+  const hoursAsDays= convertHoursToDays(logs);
+  const hoursLogged= stats.totalHours;
+  const attendancePct = wt.workingDays > 0 ? Math.min(Math.round((daysWorked / wt.workingDays) * 100), 100) : 0;
+  const hoursPct      = wt.expectedHours > 0 ? Math.min(Math.round((hoursLogged / wt.expectedHours) * 100), 100) : 0;
+  const hoursDeficit  = Math.round((wt.expectedHours - hoursLogged) * 10) / 10;
+
+  // ── Chart data ───────────────────────────────────────────
+  const weekData = aggregateByWeek(logs, 10);
+  const thisMonth = getMonthName(new Date());
+  const monthLogs = logs.filter(l => l.month === thisMonth);
+
+  // ── Build holiday chips ──────────────────────────────────
+  const holidayChips = KUWAIT_HOLIDAYS_2026.map(d =>
+    `<span class="holiday-chip">📅 ${KUWAIT_HOLIDAY_LABELS[d] || d} <span style="opacity:.6">${formatDate(d)}</span></span>`
+  ).join('');
+
+  const main = document.getElementById('mainContent');
+  main.innerHTML = `
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">⚡ My Performance</h1>
+        <p class="page-subtitle">Your personal quest stats — private to you</p>
+      </div>
+      <a href="dashboard.html" class="btn btn-secondary">← Dashboard</a>
+    </div>
+
+    <!-- ── RPG Hero card ──────────────────────────────────── -->
+    <div class="perf-hero fade-in">
+      <div class="hero-avatar" data-user-id="${session.id}" style="border-color:rgba(255,255,255,0.2);background:linear-gradient(135deg,rgba(255,255,255,0.12),rgba(255,255,255,0.04));overflow:hidden;">${session.avatar_url ? `<img src="${session.avatar_url}" alt="${session.fullName}" onerror="this.outerHTML='${initials}'" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />` : initials}</div>
+      <div class="hero-info">
+        <div class="hero-name">${session.fullName}</div>
+        <div class="hero-meta">@${session.username}</div>
+        <div class="hero-badges" style="margin-top:14px;align-items:center;gap:16px;">
+          <div style="font-size:13px;color:var(--text-2);font-weight:600;">${stats.totalHours}h total logged</div>
+          <div style="font-size:13px;color:var(--text-2);font-weight:600;">${stats.totalTasks} tasks</div>
+          <div style="font-size:13px;color:var(--text-2);font-weight:600;">🏅 ${earnedCount} badges earned</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Working Time Analysis banner ───────────────────── -->
+    <div class="wta-banner fade-in">
+      <div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px;">📅 Working Time Period</div>
+        <div class="wta-period">
+          <strong>${wt.periodLabel}</strong> &nbsp;·&nbsp;
+          ${wt.ramadanWorkingDays} Ramadan days (6h) &nbsp;·&nbsp;
+          ${wt.normalWorkingDays} normal days (8h) &nbsp;·&nbsp;
+          ${wt.holidayCount} public holiday${wt.holidayCount!==1?'s':''}
+          ${wt.warDaysOff > 0 ? ` &nbsp;·&nbsp; ${wt.warDaysOff} war day${wt.warDaysOff!==1?'s':''} deducted` : ''}
+        </div>
+      </div>
+      <div class="wta-pills">
+        <span class="wta-pill ramadan">🌙 Ramadan: Mar 3–20</span>
+        <span class="wta-pill holiday">📅 ${wt.holidayCount} holidays excluded</span>
+        ${wt.warDaysOff > 0 ? `<span class="wta-pill war">⚠️ ${wt.warDaysOff} war day${wt.warDaysOff!==1?'s':''} off</span>` : ''}
+      </div>
+    </div>
+
+    <!-- ── Working Time KPI Cards ─────────────────────────── -->
+    <div style="margin-bottom:10px;font-size:13px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.06em;">⏱️ Working Time Analysis</div>
+    <div class="wt-kpi-grid fade-in">
+
+      <div class="wt-kpi c-blue">
+        <span class="wt-kpi-icon">🗓️</span>
+        <div class="wt-kpi-label">Actual Working Days</div>
+        <div class="wt-kpi-val">${wt.workingDays}</div>
+        <div class="wt-kpi-sub">Since ${formatDate(TRACKER_START_DATE)}</div>
+        <div class="wt-kpi-sub" style="margin-top:2px;">Excl. weekends, ${wt.holidayCount} holidays${wt.warDaysOff>0?`, ${wt.warDaysOff} war days`:''}</div>
+      </div>
+
+      <div class="wt-kpi c-teal">
+        <span class="wt-kpi-icon">✅</span>
+        <div class="wt-kpi-label">Days You Worked</div>
+        <div class="wt-kpi-val">${daysWorked}</div>
+        <div class="wt-kpi-sub">Unique days with ≥1 log</div>
+        <div class="vs-bar">
+          <div class="vs-track"><div class="vs-fill" style="width:${attendancePct}%;background:var(--teal)"></div></div>
+          <div class="vs-label"><span>Attendance</span><span style="color:var(--teal);font-weight:700">${attendancePct}%</span></div>
+        </div>
+      </div>
+
+      <div class="wt-kpi c-purple">
+        <span class="wt-kpi-icon">🎯</span>
+        <div class="wt-kpi-label">Expected Hours</div>
+        <div class="wt-kpi-val">${wt.expectedHours}<span style="font-size:14px;font-weight:500;color:var(--text-2)">h</span></div>
+        <div class="wt-kpi-sub">${wt.ramadanWorkingDays}d×6h + ${wt.normalWorkingDays}d×8h${wt.warDaysOff>0?` − ${wt.warDaysOff}d war`:''}</div>
+      </div>
+
+      <div class="wt-kpi c-green">
+        <span class="wt-kpi-icon">⏱️</span>
+        <div class="wt-kpi-label">Hours You Logged</div>
+        <div class="wt-kpi-val">${hoursLogged}<span style="font-size:14px;font-weight:500;color:var(--text-2)">h</span></div>
+        <div class="vs-bar">
+          <div class="vs-track"><div class="vs-fill" style="width:${hoursPct}%;background:var(--success)"></div></div>
+          <div class="vs-label">
+            <span>vs expected</span>
+            <span style="color:${hoursDeficit<=0?'var(--success)':'var(--warning)'};font-weight:700">
+              ${hoursDeficit > 0 ? '−'+hoursDeficit+'h' : '+'+Math.abs(hoursDeficit)+'h'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="wt-kpi c-gold">
+        <span class="wt-kpi-icon">📊</span>
+        <div class="wt-kpi-label">Hours as Days</div>
+        <div class="wt-kpi-val">${hoursAsDays}<span style="font-size:14px;font-weight:500;color:var(--text-2)">d</span></div>
+        <div class="wt-kpi-sub">÷6h Ramadan, ÷8h normal</div>
+        <div class="wt-kpi-sub" style="margin-top:2px;">out of ${wt.workingDays} working days</div>
+      </div>
+
+      <div class="wt-kpi c-orange">
+        <span class="wt-kpi-icon">${hoursDeficit <= 0 ? '🏆' : '⚠️'}</span>
+        <div class="wt-kpi-label">Hours Completion</div>
+        <div class="wt-kpi-val" style="color:${hoursPct>=100?'var(--success)':hoursPct>=75?'var(--gold)':'var(--warning)'}">${hoursPct}<span style="font-size:14px;font-weight:500;color:var(--text-2)">%</span></div>
+        <div class="wt-kpi-sub">${hoursLogged}h logged of ${wt.expectedHours}h expected</div>
+      </div>
+    </div>
+
+    <!-- ── Kuwait Public Holidays Reference ───────────────── -->
+    <details class="card fade-in" style="margin-bottom:24px;padding:16px 20px;">
+      <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--text-2);user-select:none;">
+        📅 Kuwait Public Holidays 2026 (within tracker window) — click to expand
+      </summary>
+      <div style="margin-top:12px;">
+        <div class="holiday-list">${holidayChips}</div>
+        <p style="font-size:11px;color:var(--text-3);margin-top:10px;">⚠️ Islamic holiday dates are approximate. Verify with official Kuwait announcements. Dates falling on Fri/Sat are already excluded as weekends.</p>
+      </div>
+    </details>
+
+    <!-- ── Original KPI Cards ─────────────────────────────── -->
+    <div style="margin-bottom:10px;font-size:13px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.06em;">🏆 RPG Stats</div>
+    <div class="kpi-grid fade-in">
+      <div class="kpi-card accent-purple">
+        <span class="kpi-icon">⏱️</span>
+        <div class="kpi-label">Total Hours Logged</div>
+        <div class="kpi-value">${stats.totalHours}<span style="font-size:16px;font-weight:500;color:var(--text-2)">h</span></div>
+        <div class="kpi-sub">${stats.totalTasks} total tasks</div>
+      </div>
+      <div class="kpi-card accent-gold">
+        <span class="kpi-icon">📆</span>
+        <div class="kpi-label">Tasks This Month</div>
+        <div class="kpi-value">${monthLogs.length}</div>
+        <div class="kpi-sub">${thisMonth}</div>
+      </div>
+      <div class="kpi-card accent-green">
+        <span class="kpi-icon">📅</span>
+        <div class="kpi-label">Days Active</div>
+        <div class="kpi-value">${stats.uniqueDays}</div>
+        <div class="kpi-sub">Unique days logged</div>
+      </div>
+      <div class="kpi-card accent-red">
+        <span class="kpi-icon">⚡</span>
+        <div class="kpi-label">Peak Day</div>
+        <div class="kpi-value">${stats.maxDayHours.toFixed(1)}<span style="font-size:16px;font-weight:500;color:var(--text-2)">h</span></div>
+        <div class="kpi-sub">Best single day hours</div>
+      </div>
+      <div class="kpi-card accent-green">
+        <span class="kpi-icon">✅</span>
+        <div class="kpi-label">Completed Tasks</div>
+        <div class="kpi-value">${getCompletedCount(logs)}</div>
+        <div class="kpi-sub">Standalone completions logged</div>
+      </div>
+    </div>
+
+    <!-- ── Charts ──────────────────────────────────────────── -->
+    <div class="charts-grid fade-in">
+      <div class="chart-card">
+        <div class="card-title">📈 Weekly Hours (Last 10 Weeks)</div>
+        <div class="chart-container"><canvas id="weeklyChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="card-title">🍩 Category Breakdown</div>
+        <div class="chart-container"><canvas id="catChart"></canvas></div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;" class="fade-in">
+      <div class="card">
+        <div class="card-title">⏱️ Hours Per Category</div>
+        <div style="margin-top:8px;">
+          <div class="cat-hr-row">
+            <span class="cat-hr-label" style="color:var(--support)">🛡️ Support</span>
+            <div class="cat-hr-bar progress-bar"><div class="progress-fill" style="width:${stats.totalHours>0?Math.round(stats.supportHours/stats.totalHours*100):0}%;background:var(--support)"></div></div>
+            <span class="cat-hr-val">${stats.supportHours}h</span>
+          </div>
+          <div class="cat-hr-row">
+            <span class="cat-hr-label" style="color:var(--testing)">🧪 Testing</span>
+            <div class="cat-hr-bar progress-bar"><div class="progress-fill" style="width:${stats.totalHours>0?Math.round(stats.testingHours/stats.totalHours*100):0}%;background:var(--testing)"></div></div>
+            <span class="cat-hr-val">${stats.testingHours}h</span>
+          </div>
+          <div class="cat-hr-row">
+            <span class="cat-hr-label" style="color:var(--project)">🚀 Project</span>
+            <div class="cat-hr-bar progress-bar"><div class="progress-fill" style="width:${stats.totalHours>0?Math.round(stats.projectHours/stats.totalHours*100):0}%;background:var(--project)"></div></div>
+            <span class="cat-hr-val">${stats.projectHours}h</span>
+          </div>
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px;color:var(--text-3);">
+            <span>Support: <strong style="color:var(--text-1)">${stats.supportCount}</strong></span>
+            <span>Testing: <strong style="color:var(--text-1)">${stats.testingCount}</strong></span>
+            <span>Project: <strong style="color:var(--text-1)">${stats.projectCount}</strong></span>
+          </div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="card-title">📊 Tasks Per Week (Last 10 Weeks)</div>
+        <div class="chart-container"><canvas id="tasksChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- ── Achievements (approved accomplishments) ──────────── -->
+    ${(() => {
+      const approved = logs
+        .filter(l => l.accomplishment && l.accomplishment.trim() && (!l.accomplishment_status || l.accomplishment_status === 'approved'))
+        .sort((a,b) => b.log_date.localeCompare(a.log_date));
+      return `
+        <div class="card fade-in">
+          <div class="card-title-lg">🏆 Approved Achievements <span style="font-size:13px;color:var(--text-3);font-weight:400;">(${approved.length})</span></div>
+          ${approved.length === 0
+            ? '<div style="font-size:12px;color:var(--text-3);padding:14px;background:var(--bg-surface);border:1px dashed var(--border);border-radius:var(--radius-lg);">No approved achievements yet. Add a Key Accomplishment when you log a task — admin reviews then approves.</div>'
+            : `<div style="display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;">
+                ${approved.map(l => `
+                  <div style="padding:10px 14px;background:var(--bg-surface);border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:var(--radius);">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
+                      <span style="font-size:11px;color:var(--text-3);font-weight:600;">📅 ${formatDate(l.log_date)}</span>
+                      <span style="font-size:11px;color:var(--text-3);">📋 ${l.task_project || '—'}</span>
+                      ${categoryBadge(l.category)}
+                    </div>
+                    <div style="font-size:13px;color:var(--text-1);line-height:1.4;">"${l.accomplishment}"</div>
+                  </div>`).join('')}
+              </div>`}
+        </div>`;
+    })()}
+
+    <!-- ── Badges ───────────────────────────────────────────── -->
+    <div class="card fade-in">
+      <div class="card-title-lg">🏅 Achievement Badges <span style="font-size:13px;color:var(--text-3);font-weight:400;">(${earnedCount}/${badges.length} earned)</span></div>
+      ${badges.length === 0
+        ? '<div style="font-size:12px;color:var(--text-3);padding:14px;background:var(--bg-surface);border:1px dashed var(--border);border-radius:var(--radius-lg);">No badges configured yet. Ask your admin to create some.</div>'
+        : `<div class="badges-grid">
+            ${badges.map(b => `
+              <div class="badge-card ${b.earned ? 'earned' : 'locked'}">
+                <span class="badge-emoji">${b.icon || '🏅'}</span>
+                <span class="badge-name">${b.name}</span>
+                <span class="badge-desc">${b.description || ''}</span>
+                ${b.earned ? '<span style="font-size:10px;color:var(--gold);font-weight:700;margin-top:2px;">EARNED ✨</span>' : ''}
+              </div>`).join('')}
+          </div>`}
+    </div>
+  `;
+
+  requestAnimationFrame(() => renderCharts(weekData, stats));
+}
+
+function renderCharts(weekData, stats) {
+  const base = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'Inter', size: 11 } } } },
+  };
+  const isDark = !document.body.classList.contains('light-mode');
+  const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(26,22,18,0.06)';
+  const tickStyle = { color: isDark ? 'rgba(240,235,226,0.35)' : 'rgba(90,82,74,0.5)', font: { size: 10 } };
+
+  const wCtx = document.getElementById('weeklyChart');
+  if (wCtx) new Chart(wCtx, {
+    type: 'line',
+    data: {
+      labels: weekData.map(w => w.label),
+      datasets: [{ label: 'Hours', data: weekData.map(w => Math.round(w.hours*10)/10), borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,0.1)', fill:true, tension:0.4, pointBackgroundColor:'#6366f1', pointRadius:4, borderWidth:2 }]
+    },
+    options: { ...base, scales: { x:{ticks:tickStyle,grid:{color:gridColor}}, y:{ticks:tickStyle,grid:{color:gridColor},beginAtZero:true} } }
+  });
+
+  const cCtx = document.getElementById('catChart');
+  if (cCtx && stats.totalTasks > 0) new Chart(cCtx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Support','Testing','Project'],
+      datasets: [{ data:[stats.supportCount,stats.testingCount,stats.projectCount], backgroundColor:['rgba(59,130,246,0.8)','rgba(139,92,246,0.8)','rgba(16,185,129,0.8)'], borderColor:['#3b82f6','#8b5cf6','#10b981'], borderWidth:2, hoverOffset:6 }]
+    },
+    options: { ...base, cutout:'65%', plugins:{...base.plugins,legend:{...base.plugins.legend,position:'bottom'}} }
+  });
+  else if (cCtx) cCtx.parentElement.innerHTML = `<div class="empty-state" style="padding:30px;"><div class="empty-icon">📭</div><div class="empty-text">No data yet</div></div>`;
+
+  const tCtx = document.getElementById('tasksChart');
+  if (tCtx) new Chart(tCtx, {
+    type: 'bar',
+    data: {
+      labels: weekData.map(w => w.label),
+      datasets: [{ label:'Tasks', data:weekData.map(w=>w.tasks), backgroundColor:'rgba(16,185,129,0.7)', borderColor:'#10b981', borderWidth:1, borderRadius:4 }]
+    },
+    options: { ...base, scales: { x:{ticks:tickStyle,grid:{color:gridColor}}, y:{ticks:{...tickStyle,stepSize:1},grid:{color:gridColor},beginAtZero:true} } }
+  });
+}
+
+init();
+</script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+    }
+  </script>
+</body>
+</html>
